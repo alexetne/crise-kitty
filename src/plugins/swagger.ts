@@ -11,6 +11,15 @@ export default fp(async (app) => {
         description: 'API Fastify avec Prisma, Zod et autoload.',
         version: '1.0.0',
       },
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+      },
     },
     transform: jsonSchemaTransform,
   });

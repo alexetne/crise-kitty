@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod/v4';
 import type {
   FastifyPluginAsyncZod,
   ZodTypeProvider,
@@ -6,6 +7,7 @@ import type {
 
 export const createUserSchema = z.object({
   email: z.string().email(),
+  password: z.string().min(8).max(128),
   name: z.string().min(1).max(120).optional(),
 });
 
@@ -69,8 +71,13 @@ const usersRoute: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request, reply) => {
+      const passwordHash = await bcrypt.hash(request.body.password, 12);
       const user = await app.prisma.user.create({
-        data: request.body,
+        data: {
+          email: request.body.email,
+          name: request.body.name,
+          passwordHash,
+        },
       });
 
       return reply.code(201).send({

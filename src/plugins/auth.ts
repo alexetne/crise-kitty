@@ -1,0 +1,34 @@
+import fp from 'fastify-plugin';
+import fastifyJwt from '@fastify/jwt';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: {
+      userId: number;
+      email: string;
+    };
+  }
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
+
+export default fp(async (app) => {
+  await app.register(fastifyJwt, {
+    secret: process.env.JWT_SECRET ?? 'change-me-in-production',
+  });
+
+  app.decorate('authenticate', async (request, reply) => {
+    try {
+      await request.jwtVerify();
+    } catch {
+      await reply.code(401).send({
+        message: 'Unauthorized',
+      });
+    }
+  });
+});
