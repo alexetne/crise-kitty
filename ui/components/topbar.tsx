@@ -23,6 +23,7 @@ export function Topbar() {
         <Link href="/register">Register</Link>
         <Link href="/login">Login</Link>
         <Link href="/profile">Profile</Link>
+        <Link href="/simulation">Simulation</Link>
         {isLoggedIn ? (
           <button
             type="button"

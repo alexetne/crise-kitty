@@ -2,7 +2,7 @@ export const apiUrl =
   process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 type RequestOptions = {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
   token?: string | null;
   body?: unknown;
 };

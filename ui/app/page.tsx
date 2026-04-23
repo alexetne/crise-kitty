@@ -61,6 +61,13 @@ export default function HomePage() {
             affichage des métadonnées utilisateur.
           </p>
         </article>
+        <article className="panel">
+          <h2>Simulation</h2>
+          <p className="muted">
+            L interface de simulation autosauvegarde l état localement et côté
+            serveur pour reprendre exactement là où l utilisateur s est arrêté.
+          </p>
+        </article>
       </section>
     </main>
   );

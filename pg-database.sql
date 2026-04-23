@@ -417,6 +417,18 @@ CREATE TABLE "auth_mfa_challenges" (
   "created_at" timestamptz NOT NULL DEFAULT (now())
 );
 
+CREATE TABLE "simulation_ui_sessions" (
+  "id" uuid PRIMARY KEY NOT NULL,
+  "user_id" uuid NOT NULL,
+  "session_key" varchar(100) NOT NULL,
+  "route_path" varchar(255) NOT NULL,
+  "state" jsonb NOT NULL DEFAULT ('{}'::jsonb),
+  "version" int NOT NULL DEFAULT 1,
+  "last_client_saved_at" timestamptz,
+  "created_at" timestamptz NOT NULL DEFAULT (now()),
+  "updated_at" timestamptz NOT NULL DEFAULT (now())
+);
+
 CREATE TABLE "user_audit_logs" (
   "id" bigserial PRIMARY KEY NOT NULL,
   "user_id" uuid,
@@ -1033,6 +1045,12 @@ CREATE INDEX ON "auth_mfa_challenges" ("status");
 
 CREATE INDEX ON "auth_mfa_challenges" ("expires_at");
 
+CREATE INDEX ON "simulation_ui_sessions" ("user_id");
+
+CREATE INDEX ON "simulation_ui_sessions" ("updated_at");
+
+CREATE UNIQUE INDEX ON "simulation_ui_sessions" ("user_id", "session_key");
+
 CREATE INDEX ON "user_audit_logs" ("user_id");
 
 CREATE INDEX ON "user_audit_logs" ("actor_user_id");
@@ -1360,6 +1378,8 @@ ALTER TABLE "user_mfa_methods" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("
 ALTER TABLE "auth_mfa_challenges" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "auth_mfa_challenges" ADD FOREIGN KEY ("mfa_method_id") REFERENCES "user_mfa_methods" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE "simulation_ui_sessions" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "user_audit_logs" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 

@@ -66,6 +66,7 @@ model User {
   identities      UserIdentity[]
   mfaMethods      UserMfaMethod[]
   mfaChallenges   AuthMfaChallenge[]
+  uiSessions      SimulationUiSession[]
 
   @@map("users")
 }
@@ -123,4 +124,20 @@ model AuthMfaChallenge {
   mfaMethod         UserMfaMethod      @relation(fields: [mfaMethodId], references: [id])
 
   @@map("auth_mfa_challenges")
+}
+
+model SimulationUiSession {
+  id                String   @id @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  sessionKey        String   @map("session_key") @db.VarChar(100)
+  routePath         String   @map("route_path") @db.VarChar(255)
+  state             Json
+  version           Int      @default(1)
+  lastClientSavedAt DateTime? @map("last_client_saved_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, sessionKey])
+  @@map("simulation_ui_sessions")
 }
