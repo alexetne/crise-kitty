@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { clearToken, getToken } from '../lib/auth';
+import { getToken, logout } from '../lib/auth';
 import { apiRequest } from '../lib/api';
 
 type Profile = {
@@ -419,12 +419,13 @@ export function ProfileClient() {
             className="button button-primary"
             type="button"
             onClick={() => {
-              clearToken();
-              setProfile(null);
-              setError('Token supprimé. Reconnecte-toi.');
+              void logout().finally(() => {
+                setProfile(null);
+                setError('Session révoquée. Reconnecte-toi.');
+              });
             }}
           >
-            Vider le token
+            Logout
           </button>
         </div>
       </aside>

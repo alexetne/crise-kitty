@@ -6,6 +6,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod/v4';
 import type {
   FastifyPluginAsyncZod,
@@ -23,6 +24,13 @@ import {
   mapMfaMethod,
   verifyTotpCode,
 } from '../lib/mfa.js';
+import {
+  createSessionExpiry,
+  getRequestDeviceId,
+  getRequestIp,
+  getRequestUserAgent,
+  hashSessionSecret,
+} from '../lib/session-security.js';
 import {
   createUuid,
   mapUserResponse,
@@ -150,13 +158,103 @@ type CodeBody = z.infer<typeof codeBodySchema>;
 type DisableMfaBody = z.infer<typeof disableMfaBodySchema>;
 
 async function issueAccessToken(
-  reply: { jwtSign: (payload: { userId: string; email: string }) => Promise<string> },
+  reply: {
+    jwtSign: (payload: {
+      userId: string;
+      email: string;
+      sessionId: string;
+    }) => Promise<string>;
+  },
   user: { id: string; email: string },
+  sessionId: string,
 ) {
   return reply.jwtSign({
     userId: user.id,
     email: user.email,
+    sessionId,
   });
+}
+
+async function assertNoConcurrentDeviceSession(
+  app: FastifyInstance,
+  userId: string,
+  deviceId: string,
+) {
+  const activeSession = await app.prisma.userSession.findFirst({
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+      NOT: {
+        deviceId,
+      },
+    },
+    orderBy: {
+      lastUsedAt: 'desc',
+    },
+  });
+
+  if (!activeSession) {
+    return null;
+  }
+
+  await app.prisma.userSession.update({
+    where: { id: activeSession.id },
+    data: {
+      concurrencyDetectedAt: new Date(),
+    },
+  });
+
+  return activeSession;
+}
+
+async function createAuthenticatedSession(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  user: { id: string; email: string },
+  userIdentityId?: string | null,
+) {
+  const deviceId = getRequestDeviceId(request);
+  const conflictingSession = await assertNoConcurrentDeviceSession(app, user.id, deviceId);
+
+  if (conflictingSession) {
+    return {
+      conflict: true as const,
+    };
+  }
+
+  await app.prisma.userSession.updateMany({
+    where: {
+      userId: user.id,
+      deviceId,
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  });
+
+  const sessionId = createUuid();
+  const session = await app.prisma.userSession.create({
+    data: {
+      id: sessionId,
+      userId: user.id,
+      userIdentityId: userIdentityId ?? null,
+      refreshTokenHash: hashSessionSecret(sessionId),
+      deviceId,
+      ipAddress: getRequestIp(request),
+      userAgent: getRequestUserAgent(request),
+      expiresAt: createSessionExpiry(),
+      lastUsedAt: new Date(),
+    },
+  });
+
+  return {
+    conflict: false as const,
+    session,
+  };
 }
 
 const authRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -173,6 +271,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           201: authSuccessSchema,
           400: authMessageSchema,
           409: authMessageSchema,
+          403: authMessageSchema,
         },
       },
     },
@@ -228,7 +327,24 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
         return createdUser;
       });
 
-      const accessToken = await issueAccessToken(reply, user);
+      const authenticatedSession = await createAuthenticatedSession(
+        app,
+        request,
+        user,
+        identityId,
+      );
+
+      if (authenticatedSession.conflict) {
+        return reply.code(409).send({
+          message: 'This account is already active on another device',
+        });
+      }
+
+      const accessToken = await issueAccessToken(
+        reply,
+        user,
+        authenticatedSession.session.id,
+      );
 
       return reply.code(201).send({
         accessToken,
@@ -249,6 +365,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           202: loginMfaChallengeSchema,
           401: authMessageSchema,
           403: authMessageSchema,
+          409: authMessageSchema,
         },
       },
     },
@@ -292,6 +409,18 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       if (identity.user.status === UserStatus.invited) {
         return reply.code(403).send({
           message: 'User account is invited and must be activated',
+        });
+      }
+
+      const conflictingSession = await assertNoConcurrentDeviceSession(
+        app,
+        identity.user.id,
+        getRequestDeviceId(request),
+      );
+
+      if (conflictingSession) {
+        return reply.code(409).send({
+          message: 'This account is already active on another device',
         });
       }
 
@@ -401,6 +530,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           400: authMessageSchema,
           401: authMessageSchema,
           403: authMessageSchema,
+          409: authMessageSchema,
         },
       },
     },
@@ -489,7 +619,34 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
         });
       });
 
-      const accessToken = await issueAccessToken(reply, user);
+      const localIdentity = await app.prisma.userIdentity.findFirst({
+        where: {
+          userId: user.id,
+          provider: AuthProvider.local,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+
+      const authenticatedSession = await createAuthenticatedSession(
+        app,
+        request,
+        user,
+        localIdentity?.id ?? null,
+      );
+
+      if (authenticatedSession.conflict) {
+        return reply.code(409).send({
+          message: 'This account is already active on another device',
+        });
+      }
+
+      const accessToken = await issueAccessToken(
+        reply,
+        user,
+        authenticatedSession.session.id,
+      );
 
       return {
         accessToken,
@@ -525,6 +682,34 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return mapUserResponse(user);
+    },
+  );
+
+  zodApp.post(
+    '/auth/logout',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ['auth'],
+        summary: 'Révoque la session courante',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: authMessageSchema,
+          401: authMessageSchema,
+        },
+      },
+    },
+    async (request) => {
+      await app.prisma.userSession.update({
+        where: { id: request.user.sessionId },
+        data: {
+          revokedAt: new Date(),
+        },
+      });
+
+      return {
+        message: 'Logged out',
+      };
     },
   );
 

@@ -64,6 +64,7 @@ model User {
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(6)
   identities      UserIdentity[]
+  sessions        UserSession[]
   mfaMethods      UserMfaMethod[]
   mfaChallenges   AuthMfaChallenge[]
   uiSessions      SimulationUiSession[]
@@ -81,10 +82,30 @@ model UserIdentity {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   user           User         @relation(fields: [userId], references: [id])
+  sessions       UserSession[]
 
   @@unique([provider, providerUserId])
   @@unique([userId, provider])
   @@map("user_identities")
+}
+
+model UserSession {
+  id                    String        @id @db.Uuid
+  userId                String        @map("user_id") @db.Uuid
+  userIdentityId        String?       @map("user_identity_id") @db.Uuid
+  refreshTokenHash      String        @map("refresh_token_hash")
+  deviceId              String?       @map("device_id") @db.VarChar(120)
+  ipAddress             String?       @map("ip_address") @db.Inet
+  userAgent             String?
+  expiresAt             DateTime      @map("expires_at") @db.Timestamptz(6)
+  revokedAt             DateTime?     @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt            DateTime?     @map("last_used_at") @db.Timestamptz(6)
+  concurrencyDetectedAt DateTime?     @map("concurrency_detected_at") @db.Timestamptz(6)
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  user                  User          @relation(fields: [userId], references: [id])
+  userIdentity          UserIdentity? @relation(fields: [userIdentityId], references: [id])
+
+  @@map("user_sessions")
 }
 
 model UserMfaMethod {

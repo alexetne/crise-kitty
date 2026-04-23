@@ -1,3 +1,5 @@
+import { getOrCreateDeviceId } from './device';
+
 export const apiUrl =
   process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
@@ -12,11 +14,13 @@ export async function apiRequest<T>(
   { method = 'GET', token, body }: RequestOptions = {},
 ) {
   const hasBody = body !== undefined;
+  const deviceId = getOrCreateDeviceId();
 
   const response = await fetch(`${apiUrl}${path}`, {
     method,
     headers: {
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     ...(hasBody ? { body: JSON.stringify(body) } : {}),

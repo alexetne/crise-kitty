@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { clearToken, getToken } from '../lib/auth';
+import { getToken, logout } from '../lib/auth';
 
 export function Topbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -28,8 +28,9 @@ export function Topbar() {
           <button
             type="button"
             onClick={() => {
-              clearToken();
+              void logout().finally(() => {
               setIsLoggedIn(false);
+              });
             }}
           >
             Logout

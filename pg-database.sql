@@ -1556,3 +1556,12 @@ ALTER TABLE "simulation_consequence_history" ADD FOREIGN KEY ("simulation_sessio
 ALTER TABLE "scenarios" ADD FOREIGN KEY ("current_version_id") REFERENCES "scenario_versions" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "scenario_structures" ADD FOREIGN KEY ("start_node_id") REFERENCES "scenario_nodes" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+
+-- 2026-04-23: session concurrency control for multi-device detection and blocking.
+ALTER TABLE "user_sessions" ADD COLUMN IF NOT EXISTS "device_id" varchar(120);
+
+ALTER TABLE "user_sessions" ADD COLUMN IF NOT EXISTS "concurrency_detected_at" timestamptz;
+
+CREATE INDEX IF NOT EXISTS "idx_user_sessions_device_id" ON "user_sessions" ("device_id");
+
+CREATE INDEX IF NOT EXISTS "idx_user_sessions_user_id_revoked_at" ON "user_sessions" ("user_id", "revoked_at");

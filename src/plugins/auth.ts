@@ -2,12 +2,14 @@ import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { UserStatus } from '@prisma/client';
+import { getRequestDeviceId, isExpired } from '../lib/session-security.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
     user: {
       userId: string;
       email: string;
+      sessionId: string;
     };
   }
 }
@@ -30,10 +32,27 @@ export default fp(async (app) => {
       const user = await app.prisma.user.findUnique({
         where: { id: request.user.userId },
       });
+      const session = await app.prisma.userSession.findUnique({
+        where: { id: request.user.sessionId },
+      });
 
-      if (!user || user.deletedAt) {
+      if (!user || user.deletedAt || !session || session.userId !== user.id) {
         await reply.code(401).send({
           message: 'Unauthorized',
+        });
+        return;
+      }
+
+      if (session.revokedAt || isExpired(session.expiresAt)) {
+        await reply.code(401).send({
+          message: 'Session expired',
+        });
+        return;
+      }
+
+      if (session.deviceId && session.deviceId !== getRequestDeviceId(request)) {
+        await reply.code(409).send({
+          message: 'This account is already active on another device',
         });
         return;
       }
@@ -51,6 +70,13 @@ export default fp(async (app) => {
         });
         return;
       }
+
+      await app.prisma.userSession.update({
+        where: { id: session.id },
+        data: {
+          lastUsedAt: new Date(),
+        },
+      });
     } catch {
       await reply.code(401).send({
         message: 'Unauthorized',
