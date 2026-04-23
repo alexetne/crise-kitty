@@ -6,11 +6,13 @@ import QRCode from 'qrcode';
 
 const MFA_CODE_TTL_MINUTES = 10;
 
+export { MFA_CODE_TTL_MINUTES };
+
 export function hashMfaCode(code: string) {
   return createHash('sha256').update(code).digest('hex');
 }
 
-export function generateSmsCode() {
+export function generateEmailCode() {
   return String(randomInt(100_000, 1_000_000));
 }
 
@@ -50,7 +52,7 @@ export function mapMfaMethod(method: UserMfaMethod) {
     methodType: method.methodType,
     status: method.status,
     label: method.label,
-    phone: method.phone,
+    email: method.email,
     isPrimary: method.isPrimary,
     verifiedAt: method.verifiedAt?.toISOString() ?? null,
     createdAt: method.createdAt.toISOString(),
@@ -70,10 +72,6 @@ export function isChallengeExpired(expiresAt: Date) {
   return expiresAt.getTime() <= Date.now();
 }
 
-export function normalizedPhone(phone: string) {
-  return phone.replace(/[^\d+]/g, '');
-}
-
 export function getChallengeStatusFromExpiry(expiresAt: Date) {
   return isChallengeExpired(expiresAt)
     ? MfaChallengeStatus.expired
@@ -81,5 +79,5 @@ export function getChallengeStatusFromExpiry(expiresAt: Date) {
 }
 
 export function defaultMfaLabel(methodType: MfaMethodType) {
-  return methodType === MfaMethodType.sms ? 'Primary SMS' : 'Authenticator App';
+  return methodType === MfaMethodType.email ? 'Primary Email' : 'Authenticator App';
 }

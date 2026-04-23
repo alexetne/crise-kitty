@@ -27,7 +27,7 @@ CREATE TYPE "auth_provider" AS ENUM (
 
 CREATE TYPE "mfa_method_type" AS ENUM (
   'totp_app',
-  'sms'
+  'email'
 );
 
 CREATE TYPE "mfa_method_status" AS ENUM (
@@ -394,7 +394,7 @@ CREATE TABLE "user_mfa_methods" (
   "method_type" mfa_method_type NOT NULL,
   "status" mfa_method_status NOT NULL DEFAULT 'pending',
   "label" varchar(100),
-  "phone" varchar(30),
+  "email" varchar(255),
   "secret" text,
   "code_hash" text,
   "code_expires_at" timestamptz,

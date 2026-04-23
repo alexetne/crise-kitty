@@ -15,13 +15,12 @@ import {
   buildTotpSetup,
   createChallengeExpiry,
   defaultMfaLabel,
-  generateSmsCode,
+  generateEmailCode,
+  MFA_CODE_TTL_MINUTES,
   getChallengeStatusFromExpiry,
   hashMfaCode,
-  isActiveMfaMethod,
   isChallengeExpired,
   mapMfaMethod,
-  normalizedPhone,
   verifyTotpCode,
 } from '../lib/mfa.js';
 import {
@@ -53,7 +52,7 @@ const registerBodySchema = z
 const loginBodySchema = z.object({
   email: z.email(),
   password: z.string().min(8).max(128),
-  preferredMethodType: z.enum(['totp_app', 'sms']).optional(),
+  preferredMethodType: z.enum(['totp_app', 'email']).optional(),
 });
 
 const loginMfaBodySchema = z.object({
@@ -61,8 +60,8 @@ const loginMfaBodySchema = z.object({
   code: z.string().min(6).max(8),
 });
 
-const smsSetupBodySchema = z.object({
-  phone: z.string().min(6).max(30),
+const emailSetupBodySchema = z.object({
+  email: z.email().optional(),
   label: z.string().min(1).max(100).optional(),
 });
 
@@ -96,10 +95,10 @@ const authMessageSchema = z.object({
 
 const mfaMethodSchema = z.object({
   id: z.uuid(),
-  methodType: z.enum(['totp_app', 'sms']),
+  methodType: z.enum(['totp_app', 'email']),
   status: z.enum(['pending', 'active', 'disabled']),
   label: z.string().nullable(),
-  phone: z.string().nullable(),
+  email: z.string().nullable(),
   isPrimary: z.boolean(),
   verifiedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -109,7 +108,7 @@ const mfaMethodSchema = z.object({
 const loginMfaChallengeSchema = z.object({
   mfaRequired: z.literal(true),
   mfaToken: z.uuid(),
-  methodType: z.enum(['totp_app', 'sms']),
+  methodType: z.enum(['totp_app', 'email']),
   expiresAt: z.string().datetime(),
   deliveryPreview: z
     .object({
@@ -126,7 +125,7 @@ const totpSetupSchema = z.object({
   qrCodeDataUrl: z.string(),
 });
 
-const smsSetupSchema = z.object({
+const emailSetupSchema = z.object({
   method: mfaMethodSchema,
   expiresAt: z.string().datetime(),
   deliveryPreview: z
@@ -144,7 +143,7 @@ const mfaMethodsResponseSchema = z.object({
 type RegisterBody = z.infer<typeof registerBodySchema>;
 type LoginBody = z.infer<typeof loginBodySchema>;
 type LoginMfaBody = z.infer<typeof loginMfaBodySchema>;
-type SmsSetupBody = z.infer<typeof smsSetupBodySchema>;
+type EmailSetupBody = z.infer<typeof emailSetupBodySchema>;
 type CodeBody = z.infer<typeof codeBodySchema>;
 type DisableMfaBody = z.infer<typeof disableMfaBodySchema>;
 
@@ -282,7 +281,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
         });
       }
 
-      const activeMethods = await app.prisma.userMfaMethod.findMany({
+      let activeMethods = await app.prisma.userMfaMethod.findMany({
         where: {
           userId: identity.user.id,
           status: MfaMethodStatus.active,
@@ -292,20 +291,34 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       });
 
       if (activeMethods.length === 0) {
-        const user = await app.prisma.user.update({
-          where: { id: identity.user.id },
-          data: {
-            lastLoginAt: new Date(),
-            lastSeenAt: new Date(),
+        const fallbackMethod = await app.prisma.userMfaMethod.upsert({
+          where: {
+            userId_methodType_label: {
+              userId: identity.user.id,
+              methodType: MfaMethodType.email,
+              label: defaultMfaLabel(MfaMethodType.email),
+            },
+          },
+          update: {
+            email: identity.user.email,
+            status: MfaMethodStatus.active,
+            disabledAt: null,
+            verifiedAt: identity.user.emailVerifiedAt ?? new Date(),
+            isPrimary: true,
+          },
+          create: {
+            id: createUuid(),
+            userId: identity.user.id,
+            methodType: MfaMethodType.email,
+            label: defaultMfaLabel(MfaMethodType.email),
+            email: identity.user.email,
+            status: MfaMethodStatus.active,
+            verifiedAt: identity.user.emailVerifiedAt ?? new Date(),
+            isPrimary: true,
           },
         });
 
-        const accessToken = await issueAccessToken(reply, user);
-
-        return {
-          accessToken,
-          user: mapUserResponse(user),
-        };
+        activeMethods = [fallbackMethod];
       }
 
       const method =
@@ -321,17 +334,22 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
         code: string | null;
       } | null = null;
 
-      if (method.methodType === MfaMethodType.sms) {
-        const code = generateSmsCode();
+      if (method.methodType === MfaMethodType.email) {
+        const code = generateEmailCode();
         challengeCodeHash = hashMfaCode(code);
+        await app.mailer.sendMfaCode({
+          to: method.email ?? identity.user.email,
+          code,
+          expiresInMinutes: MFA_CODE_TTL_MINUTES,
+        });
         deliveryPreview =
           process.env.NODE_ENV === 'production'
             ? {
-                destination: method.phone ?? null,
+                destination: method.email ?? identity.user.email,
                 code: null,
               }
             : {
-                destination: method.phone ?? null,
+                destination: method.email ?? identity.user.email,
                 code,
               };
       }
@@ -640,52 +658,44 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  zodApp.post<{ Body: SmsSetupBody }>(
-    '/auth/mfa/sms/setup',
+  zodApp.post<{ Body: EmailSetupBody }>(
+    '/auth/mfa/email/setup',
     {
       onRequest: [app.authenticate],
       schema: {
         tags: ['auth'],
-        summary: 'Prépare un setup MFA par SMS',
+        summary: 'Prépare un setup MFA par email',
         security: [{ bearerAuth: [] }],
-        body: smsSetupBodySchema,
+        body: emailSetupBodySchema,
         response: {
-          200: smsSetupSchema,
+          200: emailSetupSchema,
           400: authMessageSchema,
         },
       },
     },
     async (request, reply) => {
-      const phone = normalizedPhone(request.body.phone);
-      if (!phone) {
+      const email = request.body.email ?? request.user.email;
+      if (!email) {
         return reply.code(400).send({
-          message: 'Invalid phone number',
+          message: 'Invalid email address',
         });
       }
 
-      const code = generateSmsCode();
+      const code = generateEmailCode();
       const expiresAt = createChallengeExpiry();
-      const label = request.body.label ?? defaultMfaLabel(MfaMethodType.sms);
+      const label = request.body.label ?? defaultMfaLabel(MfaMethodType.email);
 
       const method = await app.prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: request.user.userId },
-          data: {
-            phone,
-            lastSeenAt: new Date(),
-          },
-        });
-
-        return tx.userMfaMethod.upsert({
+        const upserted = await tx.userMfaMethod.upsert({
           where: {
             userId_methodType_label: {
               userId: request.user.userId,
-              methodType: MfaMethodType.sms,
+              methodType: MfaMethodType.email,
               label,
             },
           },
           update: {
-            phone,
+            email,
             status: MfaMethodStatus.pending,
             codeHash: hashMfaCode(code),
             codeExpiresAt: expiresAt,
@@ -695,14 +705,29 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           create: {
             id: createUuid(),
             userId: request.user.userId,
-            methodType: MfaMethodType.sms,
+            methodType: MfaMethodType.email,
             label,
-            phone,
+            email,
             status: MfaMethodStatus.pending,
             codeHash: hashMfaCode(code),
             codeExpiresAt: expiresAt,
           },
         });
+
+        await tx.user.update({
+          where: { id: request.user.userId },
+          data: {
+            lastSeenAt: new Date(),
+          },
+        });
+
+        return upserted;
+      });
+
+      await app.mailer.sendMfaCode({
+        to: email,
+        code,
+        expiresInMinutes: MFA_CODE_TTL_MINUTES,
       });
 
       return {
@@ -711,11 +736,11 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
         deliveryPreview:
           process.env.NODE_ENV === 'production'
             ? {
-                destination: phone,
+                destination: email,
                 code: null,
               }
             : {
-                destination: phone,
+                destination: email,
                 code,
               },
       };
@@ -723,12 +748,12 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   zodApp.post<{ Body: CodeBody }>(
-    '/auth/mfa/sms/enable',
+    '/auth/mfa/email/enable',
     {
       onRequest: [app.authenticate],
       schema: {
         tags: ['auth'],
-        summary: 'Active le MFA SMS après vérification du code',
+        summary: 'Active le MFA email après vérification du code',
         security: [{ bearerAuth: [] }],
         body: codeBodySchema,
         response: {
@@ -742,7 +767,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       const method = await app.prisma.userMfaMethod.findFirst({
         where: {
           userId: request.user.userId,
-          methodType: MfaMethodType.sms,
+          methodType: MfaMethodType.email,
           status: MfaMethodStatus.pending,
           disabledAt: null,
         },
@@ -753,19 +778,19 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
 
       if (!method?.codeHash || !method.codeExpiresAt) {
         return reply.code(404).send({
-          message: 'No pending SMS setup found',
+          message: 'No pending email setup found',
         });
       }
 
       if (isChallengeExpired(method.codeExpiresAt)) {
         return reply.code(400).send({
-          message: 'SMS code expired',
+          message: 'Email code expired',
         });
       }
 
       if (hashMfaCode(request.body.code) !== method.codeHash) {
         return reply.code(400).send({
-          message: 'Invalid SMS code',
+          message: 'Invalid email code',
         });
       }
 

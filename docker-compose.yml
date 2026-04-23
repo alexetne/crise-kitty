@@ -8,6 +8,11 @@ services:
       POSTGRES_DB: myapp_db
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d myapp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./pg-database.sql:/docker-entrypoint-initdb.d/01-pg-database.sql:ro
@@ -35,9 +40,16 @@ services:
       DATABASE_URL: "postgresql://user:password@postgres-db:5432/myapp_db"
       PORT: "5001"
       HOST: "0.0.0.0"
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_PORT: "${SMTP_PORT}"
+      SMTP_SECURE: "${SMTP_SECURE}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASS: "${SMTP_PASS}"
+      SMTP_FROM: "${SMTP_FROM}"
     command: sh -c "npm install && npm run prisma:generate && npm run dev"
     depends_on:
-      - postgres-db
+      postgres-db:
+        condition: service_healthy
 
   ui:
     image: node:24-alpine

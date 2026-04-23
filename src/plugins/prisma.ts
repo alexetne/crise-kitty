@@ -10,7 +10,28 @@ declare module 'fastify' {
 export default fp(async (app) => {
   const prisma = new PrismaClient();
 
-  await prisma.$connect();
+  const maxAttempts = 15;
+  const retryDelayMs = 2_000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await prisma.$connect();
+      break;
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+
+      app.log.warn(
+        { attempt, maxAttempts },
+        'Prisma connection failed, retrying...',
+      );
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, retryDelayMs);
+      });
+    }
+  }
 
   app.decorate('prisma', prisma);
 

@@ -18,10 +18,10 @@ type Profile = {
 
 type MfaMethod = {
   id: string;
-  methodType: 'totp_app' | 'sms';
+  methodType: 'totp_app' | 'email';
   status: 'pending' | 'active' | 'disabled';
   label: string | null;
-  phone: string | null;
+  email: string | null;
   isPrimary: boolean;
   verifiedAt: string | null;
   createdAt: string;
@@ -35,7 +35,7 @@ type TotpSetup = {
   qrCodeDataUrl: string;
 };
 
-type SmsSetup = {
+type EmailSetup = {
   method: MfaMethod;
   expiresAt: string;
   deliveryPreview: {
@@ -49,9 +49,9 @@ export function ProfileClient() {
   const [methods, setMethods] = useState<MfaMethod[]>([]);
   const [totpSetup, setTotpSetup] = useState<TotpSetup | null>(null);
   const [totpCode, setTotpCode] = useState('');
-  const [smsPhone, setSmsPhone] = useState('');
-  const [smsCode, setSmsCode] = useState('');
-  const [smsSetup, setSmsSetup] = useState<SmsSetup | null>(null);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [emailCode, setEmailCode] = useState('');
+  const [emailSetup, setEmailSetup] = useState<EmailSetup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,7 +158,7 @@ export function ProfileClient() {
     }
   }
 
-  async function startSmsSetup() {
+  async function startEmailSetup() {
     const token = getToken();
     if (!token) {
       return;
@@ -168,24 +168,24 @@ export function ProfileClient() {
     setNotice(null);
 
     try {
-      const payload = await apiRequest<SmsSetup>('/auth/mfa/sms/setup', {
+      const payload = await apiRequest<EmailSetup>('/auth/mfa/email/setup', {
         method: 'POST',
         token,
-        body: { phone: smsPhone },
+        body: { email: emailAddress || undefined },
       });
-      setSmsSetup(payload);
-      setNotice('Code SMS émis. Valide-le pour activer la méthode.');
+      setEmailSetup(payload);
+      setNotice('Code email émis. Valide-le pour activer la méthode.');
       await refreshMethods();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Impossible de préparer le MFA SMS.',
+          : 'Impossible de préparer le MFA email.',
       );
     }
   }
 
-  async function enableSms() {
+  async function enableEmail() {
     const token = getToken();
     if (!token) {
       return;
@@ -195,20 +195,20 @@ export function ProfileClient() {
     setNotice(null);
 
     try {
-      await apiRequest<MfaMethod>('/auth/mfa/sms/enable', {
+      await apiRequest<MfaMethod>('/auth/mfa/email/enable', {
         method: 'POST',
         token,
-        body: { code: smsCode },
+        body: { code: emailCode },
       });
-      setSmsCode('');
-      setSmsSetup(null);
-      setNotice('MFA SMS activé.');
+      setEmailCode('');
+      setEmailSetup(null);
+      setNotice('MFA email activé.');
       await refreshMethods();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Impossible d activer le MFA SMS.',
+          : 'Impossible d activer le MFA email.',
       );
     }
   }
@@ -246,7 +246,7 @@ export function ProfileClient() {
         <h1>Ton espace.</h1>
         <p>
           Vérification du JWT, récupération du profil, puis configuration du MFA
-          via application d authentification ou SMS.
+          via application d authentification ou email.
         </p>
 
         {loading ? <div className="success">Chargement du profil...</div> : null}
@@ -286,7 +286,7 @@ export function ProfileClient() {
         <span className="pill">MFA</span>
         <h2>Protection du compte</h2>
         <p className="muted">
-          Active une application TOTP ou un second facteur par SMS. Le login
+          Active une application TOTP ou un second facteur par email. Le login
           exigera ensuite ce code avant d émettre le JWT final.
         </p>
 
@@ -294,11 +294,11 @@ export function ProfileClient() {
           {methods.map((method) => (
             <div className="profile-row" key={method.id}>
               <small>
-                {method.methodType === 'sms' ? 'SMS' : 'Authenticator App'}
+                {method.methodType === 'email' ? 'Email' : 'Authenticator App'}
                 {method.isPrimary ? ' • primaire' : ''}
               </small>
               <strong>
-                {method.label ?? (method.phone || method.methodType)}
+                {method.label ?? (method.email || method.methodType)}
               </strong>
               <div className="inline-actions">
                 <span className="pill">{method.status}</span>
@@ -362,40 +362,40 @@ export function ProfileClient() {
         ) : null}
 
         <div className="field" style={{ marginTop: '1rem' }}>
-          <label htmlFor="sms-phone">Téléphone pour SMS</label>
+          <label htmlFor="email-address">Adresse email MFA</label>
           <input
-            id="sms-phone"
-            value={smsPhone}
-            onChange={(event) => setSmsPhone(event.target.value)}
-            placeholder="+33600000000"
+            id="email-address"
+            value={emailAddress}
+            onChange={(event) => setEmailAddress(event.target.value)}
+            placeholder={profile?.email ?? 'mfa@example.com'}
           />
         </div>
         <button
           className="button button-secondary"
           type="button"
           onClick={() => {
-            void startSmsSetup();
+            void startEmailSetup();
           }}
         >
-          Envoyer un code SMS
+          Envoyer un code email
         </button>
 
-        {smsSetup ? (
+        {emailSetup ? (
           <div className="profile-row" style={{ marginTop: '1rem' }}>
-            <small>SMS envoyé vers</small>
-            <strong>{smsSetup.deliveryPreview?.destination}</strong>
-            {smsSetup.deliveryPreview?.code ? (
+            <small>Email envoyé vers</small>
+            <strong>{emailSetup.deliveryPreview?.destination}</strong>
+            {emailSetup.deliveryPreview?.code ? (
               <div className="success">
                 Code de développement :{' '}
-                <strong>{smsSetup.deliveryPreview.code}</strong>
+                <strong>{emailSetup.deliveryPreview.code}</strong>
               </div>
             ) : null}
             <div className="field">
-              <label htmlFor="sms-code">Code SMS</label>
+              <label htmlFor="email-code">Code email</label>
               <input
-                id="sms-code"
-                value={smsCode}
-                onChange={(event) => setSmsCode(event.target.value)}
+                id="email-code"
+                value={emailCode}
+                onChange={(event) => setEmailCode(event.target.value)}
                 placeholder="123456"
               />
             </div>
@@ -403,10 +403,10 @@ export function ProfileClient() {
               className="button button-primary"
               type="button"
               onClick={() => {
-                void enableSms();
+                void enableEmail();
               }}
             >
-              Activer SMS
+              Activer email
             </button>
           </div>
         ) : null}

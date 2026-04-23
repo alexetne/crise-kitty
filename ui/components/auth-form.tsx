@@ -25,7 +25,7 @@ type AuthSuccess = {
 type MfaChallenge = {
   mfaRequired: true;
   mfaToken: string;
-  methodType: 'totp_app' | 'sms';
+  methodType: 'totp_app' | 'email';
   expiresAt: string;
   deliveryPreview: {
     destination: string | null;
@@ -84,8 +84,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
       if ('mfaRequired' in payload) {
         setMfaChallenge(payload);
         setSuccess(
-          payload.methodType === 'sms'
-            ? 'Code SMS demandé. Saisis-le pour terminer la connexion.'
+          payload.methodType === 'email'
+            ? 'Code email demandé. Saisis-le pour terminer la connexion.'
             : 'Code de ton application d authentification requis.',
         );
         return;
@@ -183,8 +183,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
               <div className="profile-row" style={{ marginBottom: '1rem' }}>
                 <small>Méthode requise</small>
                 <strong>
-                  {mfaChallenge.methodType === 'sms'
-                    ? 'SMS'
+                  {mfaChallenge.methodType === 'email'
+                    ? 'Email'
                     : 'Application d authentification'}
                 </strong>
               </div>
@@ -242,7 +242,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         <h2>Ce que cette UI fait réellement</h2>
         <p className="muted">
           Le login peut maintenant exiger un second facteur. Si le profil a activé
-          TOTP ou SMS, la connexion passe automatiquement en challenge MFA.
+          TOTP ou email, la connexion passe automatiquement en challenge MFA.
         </p>
         <div className="profile-list">
           <div className="profile-row">

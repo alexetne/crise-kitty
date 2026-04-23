@@ -27,7 +27,7 @@ enum AuthProvider {
 
 enum MfaMethodType {
   totp_app
-  sms
+  email
 
   @@map("mfa_method_type")
 }
@@ -93,7 +93,7 @@ model UserMfaMethod {
   methodType    MfaMethodType   @map("method_type")
   status        MfaMethodStatus @default(pending)
   label         String?         @db.VarChar(100)
-  phone         String?         @db.VarChar(30)
+  email         String?         @db.VarChar(255)
   secret        String?
   codeHash      String?         @map("code_hash")
   codeExpiresAt DateTime?       @map("code_expires_at") @db.Timestamptz(6)
