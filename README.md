@@ -80,6 +80,78 @@ npm install
 npm run dev
 ```
 
+## Authentification & Rôles (RBAC)
+
+### Architecture RBAC
+
+Crise Kitty utilise un système **Role-Based Access Control (RBAC)** à deux niveaux :
+
+#### 1. Rôles Globaux (Plateforme)
+- **Super Admin** : Accès total à la plateforme (équipe interne)
+- **Account Manager** : Gère les factures, quotas et subscriptions des organisations
+
+#### 2. Rôles par Organisation
+- **Admin Client** : Gère les utilisateurs et accès de sa propre organisation
+- **Concepteur/Animateur** : Crée les scénarios et lance les sessions de simulation
+- **Observateur/Auditeur** : Accès en lecture seule pour évaluer la performance
+- **Apprenant/Joueur** : Accès limité aux interfaces de simulation
+
+### Permissions Fines
+
+Chaque rôle dispose d'un ensemble de permissions basées sur :
+- **Ressource** : organizations, scenarios, sessions, reports, etc.
+- **Action** : view, create, edit, delete, manage, publish, trigger
+
+Exemples :
+- `scenarios:edit` - Éditer un scénario
+- `retex_reports:view` - Voir les rapports RETEX
+- `injections:trigger` - Déclencher une alerte/injection
+
+### Page d'Administration
+
+Accès : `http://localhost:5000/admin`
+
+La page admin est accessible aux utilisateurs avec les permissions appropriées :
+- **Organisations** : Créer, éditer organisations et hiérarchies
+- **Utilisateurs** : Gérer utilisateurs globaux et leurs rôles
+- **Rôles & Permissions** : Configurer les rôles et permissions (RBAC)
+- **Facturation** : Gérer les quotas et abonnements
+- **Logs d'Audit** : Consulter l'historique des actions
+- **Scénarios** : Gérer les scénarios globaux
+- **Sessions Actives** : Monitorer les sessions en cours
+- **Profil Organisation** : Éditer les détails et marquage blanc
+
+### Marquage Blanc (White-Label)
+
+Chaque organisation peut personnaliser son apparence :
+- Logo personnalisé
+- Nom de marque
+- Couleurs primaires et secondaires
+- Nom de session configurable
+
+Configuration accessible dans : `Admin > Organisations > Profil`
+
+### Tables de Base de Données
+
+- `roles` - Définition des rôles
+- `permissions` - Définition des permissions
+- `role_permissions` - Mapping rôles ↔ permissions
+- `user_global_roles` - Rôles globaux des utilisateurs
+- `organization_member_roles` - Rôles des membres dans une organisation
+
+### Endpoints Admin
+
+```
+GET  /admin/stats              - Statistiques globales
+GET  /admin/roles              - Lister tous les rôles
+GET  /admin/roles/:id          - Détails d'un rôle
+POST /admin/roles              - Créer un nouveau rôle
+GET  /admin/organizations      - Lister les organisations
+GET  /admin/organizations/:id  - Détails d'une organisation
+GET  /admin/users              - Lister les utilisateurs
+GET  /auth/permissions         - Permissions de l'utilisateur actuel
+```
+
 ## Variables d'environnement
 
 Fichier racine `.env` :
@@ -104,6 +176,19 @@ NEXT_PUBLIC_API_URL="/api"
 ### Authentifiés
 
 - `GET /auth/profile`
+- `GET /auth/permissions`
+- `GET /auth/organization-context`
+
+### Admin (Super Admin & Account Manager)
+
+- `GET /admin/stats`
+- `GET /admin/roles`
+- `GET /admin/roles/:id`
+- `POST /admin/roles`
+- `GET /admin/organizations`
+- `GET /admin/organizations/:id`
+- `PUT /admin/organizations/:id`
+- `GET /admin/users`
 
 ### Utilitaires
 
@@ -114,7 +199,7 @@ NEXT_PUBLIC_API_URL="/api"
 Depuis le navigateur, passe toujours par l'origine `5000` :
 - `http://localhost:5000/api/auth/register`
 - `http://localhost:5000/api/auth/login`
-- `http://localhost:5000/api/auth/profile`
+- `http://localhost:5000/api/admin/stats`
 
 ## Auth actuelle
 
@@ -155,10 +240,15 @@ En interne, la doc vient du backend Fastify.
 - [pg-database.sql](/home/alexandre/Bureau/DEV/crise-kitty/pg-database.sql)
 - [prisma/schema.prisma](/home/alexandre/Bureau/DEV/crise-kitty/prisma/schema.prisma)
 - [src/routes/auth.ts](/home/alexandre/Bureau/DEV/crise-kitty/src/routes/auth.ts)
+- [src/routes/admin.ts](/home/alexandre/Bureau/DEV/crise-kitty/src/routes/admin.ts)
+- [src/routes/auth-permissions.ts](/home/alexandre/Bureau/DEV/crise-kitty/src/routes/auth-permissions.ts)
 - [src/routes/users.ts](/home/alexandre/Bureau/DEV/crise-kitty/src/routes/users.ts)
-- [ui/app/page.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/app/page.tsx)
+- [ui/app/admin/page.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/app/admin/page.tsx)
+- [ui/app/admin/organizations/page.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/app/admin/organizations/page.tsx)
+- [ui/app/admin/roles/page.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/app/admin/roles/page.tsx)
 - [ui/components/auth-form.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/components/auth-form.tsx)
 - [ui/components/profile-client.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/components/profile-client.tsx)
+- [ui/components/topbar.tsx](/home/alexandre/Bureau/DEV/crise-kitty/ui/components/topbar.tsx)
 
 ## Notes
 

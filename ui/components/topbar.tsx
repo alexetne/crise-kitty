@@ -81,6 +81,11 @@ export function Topbar() {
         <Link href="/login">Login</Link>
         <Link href="/profile">Profile</Link>
         <Link href="/simulation">Simulation</Link>
+        {isLoggedIn && (
+          <Link href="/admin" className="admin-link">
+            Admin
+          </Link>
+        )}
         {isLoggedIn && organizationContext?.organizations.length ? (
           <select
             aria-label="Organisation active"

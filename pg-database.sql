@@ -1617,3 +1617,124 @@ BEGIN
       DEFERRABLE INITIALLY IMMEDIATE;
   END IF;
 END $$;
+
+-- =====================================================
+-- 2026-04-23: Rôles et Permissions RBAC (Roles & Permissions)
+-- =====================================================
+
+-- Insertion des rôles globaux (Platform-level roles)
+INSERT INTO "roles" ("id", "code", "name", "scope", "description", "is_system", "created_at", "updated_at")
+VALUES
+  ('550e8400-e29b-41d4-a716-446655440001', 'super_admin', 'Super Admin', 'global', 'Accès total à la plateforme (équipe interne)', true, now(), now()),
+  ('550e8400-e29b-41d4-a716-446655440002', 'account_manager', 'Account Manager', 'global', 'Gère les factures et les quotas des organisations', true, now(), now())
+ON CONFLICT ("code") DO NOTHING;
+
+-- Insertion des rôles d'organisation
+INSERT INTO "roles" ("id", "code", "name", "scope", "description", "is_system", "created_at", "updated_at")
+VALUES
+  ('550e8400-e29b-41d4-a716-446655440003', 'org_admin', 'Admin Client', 'organization', 'Gère les utilisateurs et accès de l''organisation', true, now(), now()),
+  ('550e8400-e29b-41d4-a716-446655440004', 'scenario_designer', 'Concepteur/Animateur', 'organization', 'Crée les scénarios et lance les sessions', true, now(), now()),
+  ('550e8400-e29b-41d4-a716-446655440005', 'observer', 'Observateur/Auditeur', 'organization', 'Accès en lecture seule pour évaluer la performance', true, now(), now()),
+  ('550e8400-e29b-41d4-a716-446655440006', 'participant', 'Apprenant/Joueur', 'organization', 'Accès limité aux interfaces de simulation', true, now(), now())
+ON CONFLICT ("code") DO NOTHING;
+
+-- Insertion des permissions
+INSERT INTO "permissions" ("id", "code", "name", "description", "resource", "action", "created_at", "updated_at")
+VALUES
+  -- Platform Management
+  ('650e8400-e29b-41d4-a716-446655440001', 'view_platform', 'Voir Plateforme', 'platform', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440002', 'manage_organizations', 'Gérer Organisations', 'organizations', 'manage', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440003', 'manage_roles', 'Gérer Rôles', 'roles', 'manage', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440004', 'view_audit_logs', 'Voir Logs d''Audit', 'audit_logs', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440005', 'manage_billing', 'Gérer Facturation', 'billing', 'manage', now(), now()),
+  
+  -- Organization Management
+  ('650e8400-e29b-41d4-a716-446655440006', 'view_organization', 'Voir Organisation', 'organization', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440007', 'manage_org_members', 'Gérer Membres Org', 'organization_members', 'manage', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440008', 'manage_org_roles', 'Gérer Rôles Org', 'organization_roles', 'manage', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440009', 'manage_org_profile', 'Gérer Profil Org', 'organization_profile', 'manage', now(), now()),
+  
+  -- Scenario Management
+  ('650e8400-e29b-41d4-a716-446655440010', 'view_scenarios', 'Voir Scénarios', 'scenarios', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440011', 'create_scenario', 'Créer Scénario', 'scenarios', 'create', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440012', 'edit_scenario', 'Éditer Scénario', 'scenarios', 'edit', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440013', 'publish_scenario', 'Publier Scénario', 'scenarios', 'publish', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440014', 'delete_scenario', 'Supprimer Scénario', 'scenarios', 'delete', now(), now()),
+  
+  -- Session Management
+  ('650e8400-e29b-41d4-a716-446655440015', 'view_sessions', 'Voir Sessions', 'sessions', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440016', 'create_session', 'Créer Session', 'sessions', 'create', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440017', 'manage_session', 'Gérer Session', 'sessions', 'manage', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440018', 'trigger_injections', 'Déclencher Injections', 'injections', 'trigger', now(), now()),
+  
+  -- Reporting & Analytics
+  ('650e8400-e29b-41d4-a716-446655440019', 'view_reports', 'Voir Rapports', 'reports', 'view', now(), now()),
+  ('650e8400-e29b-41d4-a716-446655440020', 'view_retex_reports', 'Voir Rapports RETEX', 'retex_reports', 'view', now(), now())
+ON CONFLICT ("code") DO NOTHING;
+
+-- Assigner les permissions aux rôles Super Admin (all permissions)
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440001',
+  "id",
+  now()
+FROM "permissions"
+ON CONFLICT DO NOTHING;
+
+-- Assigner les permissions au rôle Account Manager
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440002',
+  "id",
+  now()
+FROM "permissions"
+WHERE "code" IN ('view_organization', 'manage_billing', 'view_audit_logs')
+ON CONFLICT DO NOTHING;
+
+-- Assigner les permissions au rôle Org Admin
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440003',
+  "id",
+  now()
+FROM "permissions"
+WHERE "code" IN (
+  'view_organization', 'manage_org_members', 'manage_org_roles', 'manage_org_profile',
+  'view_scenarios', 'view_sessions', 'view_reports', 'view_retex_reports'
+)
+ON CONFLICT DO NOTHING;
+
+-- Assigner les permissions au rôle Concepteur/Animateur
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440004',
+  "id",
+  now()
+FROM "permissions"
+WHERE "code" IN (
+  'view_organization', 'view_scenarios', 'create_scenario', 'edit_scenario', 'publish_scenario',
+  'view_sessions', 'create_session', 'manage_session', 'trigger_injections', 'view_reports'
+)
+ON CONFLICT DO NOTHING;
+
+-- Assigner les permissions au rôle Observateur/Auditeur
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440005',
+  "id",
+  now()
+FROM "permissions"
+WHERE "code" IN (
+  'view_organization', 'view_scenarios', 'view_sessions', 'view_reports', 'view_retex_reports'
+)
+ON CONFLICT DO NOTHING;
+
+-- Assigner les permissions au rôle Participant/Joueur
+INSERT INTO "role_permissions" ("role_id", "permission_id", "created_at")
+SELECT 
+  '550e8400-e29b-41d4-a716-446655440006',
+  "id",
+  now()
+FROM "permissions"
+WHERE "code" IN ('view_sessions', 'view_reports')
+ON CONFLICT DO NOTHING;

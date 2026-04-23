@@ -48,6 +48,13 @@ enum MfaChallengeStatus {
   @@map("mfa_challenge_status")
 }
 
+enum RoleScope {
+  global
+  organization
+
+  @@map("role_scope")
+}
+
 model User {
   id              String         @id @db.Uuid
   email           String         @unique @db.VarChar(255)
@@ -73,6 +80,9 @@ model User {
   updatedScenarios Scenario[]    @relation("ScenarioUpdatedByUser")
   auditLogsForUser UserAuditLog[] @relation("AuditLogUser")
   auditLogsAsActor UserAuditLog[] @relation("AuditLogActor")
+  globalRoles     UserGlobalRole[]
+  assignedGlobalRoles UserGlobalRole[] @relation("AssignedByUser")
+  assignedOrgRoles OrganizationMemberRole[] @relation("AssignedByUser")
 
   @@map("users")
 }
@@ -117,6 +127,7 @@ model OrganizationMember {
   deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(6)
   organization   Organization @relation(fields: [organizationId], references: [id])
   user           User         @relation(fields: [userId], references: [id])
+  roles          OrganizationMemberRole[]
 
   @@unique([organizationId, userId])
   @@map("organization_members")
@@ -262,4 +273,72 @@ model UserAuditLog {
   organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@map("user_audit_logs")
+}
+
+model Role {
+  id          String         @id @db.Uuid
+  code        String         @unique @db.VarChar(50)
+  name        String         @db.VarChar(100)
+  scope       RoleScope
+  description String?
+  isSystem    Boolean        @default(false) @map("is_system")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  permissions RolePermission[]
+  globalUsers UserGlobalRole[]
+  orgMembers  OrganizationMemberRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String         @id @db.Uuid
+  code        String         @unique @db.VarChar(100)
+  name        String         @db.VarChar(150)
+  description String?
+  resource    String         @db.VarChar(100)
+  action      String         @db.VarChar(50)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserGlobalRole {
+  id               String   @id @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  roleId           String   @map("role_id") @db.Uuid
+  assignedByUserId String?  @map("assigned_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role             Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUser   User?    @relation("AssignedByUser", fields: [assignedByUserId], references: [id])
+
+  @@map("user_global_roles")
+}
+
+model OrganizationMemberRole {
+  id                   String            @id @db.Uuid
+  organizationMemberId String            @map("organization_member_id") @db.Uuid
+  roleId               String            @map("role_id") @db.Uuid
+  assignedByUserId     String?           @map("assigned_by_user_id") @db.Uuid
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  organizationMember   OrganizationMember @relation(fields: [organizationMemberId], references: [id], onDelete: Cascade)
+  role                 Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUser       User?             @relation("AssignedByUser", fields: [assignedByUserId], references: [id])
+
+  @@map("organization_member_roles")
 }
