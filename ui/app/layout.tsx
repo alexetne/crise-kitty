@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { SessionTimeoutGuard } from '../components/session-timeout-guard';
 
 export const metadata: Metadata = {
   title: 'Crise Kitty',
@@ -12,6 +13,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
+        <SessionTimeoutGuard />
         <div className="shell">{children}</div>
       </body>
     </html>

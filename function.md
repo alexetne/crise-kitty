@@ -13,3 +13,33 @@
 - Concurrence de session : Empêcher (ou alerter) si le même compte est utilisé sur deux appareils différents simultanément.
 
 - Timeout de sécurité : Déconnexion automatique après une période d'inactivité, ajustable par l'organisation.
+
+# Organisations / Entités
+
+- Hiérarchie : Possibilité de créer des sous-entités (ex: "Filiale France", "Usine Lyon").
+
+- Isolation des données : Une cloison étanche totale entre les organisations. L'Organisation A ne doit jamais voir les scénarios ou les logs de l'Organisation B.
+
+- Marquage blanc : Optionnel, mais permet d'intégrer le logo et les couleurs de l'entreprise cliente
+
+# Rôles & Permissions fines
+Il faut distinguer le rôle "Plateforme" (qui gère l'outil) du rôle "Simulation" (qui agit dans la crise).
+## Rôles Globaux (SaaS) :
+
+- Super Admin : Accès total (ton équipe).
+
+- Account Manager : Gère les factures et les quotas de l'organisation
+
+## Rôles par Organisation :
+
+- Admin Client : Gère les utilisateurs et les accès de sa propre entreprise
+
+- Concepteur/Animateur : Crée les scénarios et lance les sessions
+
+- Observateur/Auditeur : Accès en lecture seule pour évaluer la performance
+
+- Apprenant/Joueur : Accès limité aux interfaces de simulation
+
+## Permissions Fines (RBAC) : 
+
+- Capacité de définir qui peut : éditer un scénario, voir les rapports de Retex, ou déclencher une alerte

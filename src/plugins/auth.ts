@@ -2,6 +2,10 @@ import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { UserStatus } from '@prisma/client';
+import {
+  isSessionInactive,
+  resolveUserSessionTimeoutMinutes,
+} from '../lib/session-policy.js';
 import { getRequestDeviceId, isExpired } from '../lib/session-security.js';
 
 declare module '@fastify/jwt' {
@@ -46,6 +50,22 @@ export default fp(async (app) => {
       if (session.revokedAt || isExpired(session.expiresAt)) {
         await reply.code(401).send({
           message: 'Session expired',
+        });
+        return;
+      }
+
+      const sessionPolicy = await resolveUserSessionTimeoutMinutes(app, user.id);
+
+      if (isSessionInactive(session.lastUsedAt ?? session.createdAt, sessionPolicy.inactivityTimeoutMinutes)) {
+        await app.prisma.userSession.update({
+          where: { id: session.id },
+          data: {
+            revokedAt: new Date(),
+          },
+        });
+
+        await reply.code(401).send({
+          message: 'Session expired due to inactivity',
         });
         return;
       }

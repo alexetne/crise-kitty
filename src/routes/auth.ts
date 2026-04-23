@@ -25,6 +25,12 @@ import {
   verifyTotpCode,
 } from '../lib/mfa.js';
 import {
+  MAX_SESSION_TIMEOUT_MINUTES,
+  MIN_SESSION_TIMEOUT_MINUTES,
+  normalizeSessionTimeoutMinutes,
+  resolveUserSessionTimeoutMinutes,
+} from '../lib/session-policy.js';
+import {
   createSessionExpiry,
   getRequestDeviceId,
   getRequestIp,
@@ -101,6 +107,25 @@ const authSuccessSchema = z.object({
 
 const authMessageSchema = z.object({
   message: z.string(),
+});
+
+const sessionPolicySchema = z.object({
+  inactivityTimeoutMinutes: z.number().int(),
+  source: z.enum(['default', 'organization']),
+  organizationId: z.uuid().nullable(),
+  organizationName: z.string().nullable(),
+});
+
+const organizationPolicyParamsSchema = z.object({
+  id: z.uuid(),
+});
+
+const organizationPolicyBodySchema = z.object({
+  inactivityTimeoutMinutes: z
+    .number()
+    .int()
+    .min(MIN_SESSION_TIMEOUT_MINUTES)
+    .max(MAX_SESSION_TIMEOUT_MINUTES),
 });
 
 const mfaMethodSchema = z.object({
@@ -682,6 +707,71 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return mapUserResponse(user);
+    },
+  );
+
+  zodApp.get(
+    '/auth/session-policy',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ['auth'],
+        summary: 'Retourne la politique de timeout d inactivité appliquée à la session',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: sessionPolicySchema,
+        },
+      },
+    },
+    async (request) => {
+      return resolveUserSessionTimeoutMinutes(app, request.user.userId);
+    },
+  );
+
+  zodApp.patch<{
+    Params: z.infer<typeof organizationPolicyParamsSchema>;
+    Body: z.infer<typeof organizationPolicyBodySchema>;
+  }>(
+    '/organizations/:id/session-policy',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ['organizations'],
+        summary: 'Met à jour le timeout d inactivité appliqué par une organisation',
+        security: [{ bearerAuth: [] }],
+        params: organizationPolicyParamsSchema,
+        body: organizationPolicyBodySchema,
+        response: {
+          200: sessionPolicySchema,
+          404: authMessageSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const organizations = await app.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id
+        FROM organizations
+        WHERE id = ${request.params.id}::uuid
+          AND deleted_at IS NULL
+      `;
+
+      if (organizations.length === 0) {
+        return reply.code(404).send({
+          message: 'Organization not found',
+        });
+      }
+
+      await app.prisma.$executeRaw`
+        UPDATE organizations
+        SET
+          session_timeout_minutes = ${normalizeSessionTimeoutMinutes(
+            request.body.inactivityTimeoutMinutes,
+          )},
+          updated_at = now()
+        WHERE id = ${request.params.id}::uuid
+      `;
+
+      return resolveUserSessionTimeoutMinutes(app, request.user.userId);
     },
   );
 

@@ -64,12 +64,62 @@ model User {
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(6)
   identities      UserIdentity[]
+  organizationMembers OrganizationMember[]
   sessions        UserSession[]
   mfaMethods      UserMfaMethod[]
   mfaChallenges   AuthMfaChallenge[]
   uiSessions      SimulationUiSession[]
+  createdScenarios Scenario[]    @relation("ScenarioCreatedByUser")
+  updatedScenarios Scenario[]    @relation("ScenarioUpdatedByUser")
+  auditLogsForUser UserAuditLog[] @relation("AuditLogUser")
+  auditLogsAsActor UserAuditLog[] @relation("AuditLogActor")
 
   @@map("users")
+}
+
+model Organization {
+  id                    String               @id @db.Uuid
+  name                  String               @db.VarChar(150)
+  slug                  String               @unique @db.VarChar(150)
+  description           String?
+  isActive              Boolean              @default(true) @map("is_active")
+  sessionTimeoutMinutes Int                  @default(30) @map("session_timeout_minutes")
+  parentOrganizationId  String?              @map("parent_organization_id") @db.Uuid
+  logoUrl               String?              @map("logo_url")
+  brandName             String?              @map("brand_name") @db.VarChar(150)
+  brandPrimaryColor     String?              @map("brand_primary_color") @db.VarChar(20)
+  brandSecondaryColor   String?              @map("brand_secondary_color") @db.VarChar(20)
+  brandAccentColor      String?              @map("brand_accent_color") @db.VarChar(20)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  parentOrganization    Organization?        @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
+  childOrganizations    Organization[]       @relation("OrganizationHierarchy")
+  members               OrganizationMember[]
+  activeSessions        UserSession[]        @relation("ActiveOrganizationSession")
+  scenarios             Scenario[]
+  auditLogs             UserAuditLog[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  jobTitle       String?      @map("job_title") @db.VarChar(100)
+  department     String?      @db.VarChar(100)
+  status         String       @db.VarChar(20)
+  joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz(6)
+  leftAt         DateTime?    @map("left_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
 }
 
 model UserIdentity {
@@ -93,10 +143,11 @@ model UserSession {
   id                    String        @id @db.Uuid
   userId                String        @map("user_id") @db.Uuid
   userIdentityId        String?       @map("user_identity_id") @db.Uuid
+  activeOrganizationId  String?       @map("active_organization_id") @db.Uuid
   refreshTokenHash      String        @map("refresh_token_hash")
   deviceId              String?       @map("device_id") @db.VarChar(120)
   ipAddress             String?       @map("ip_address") @db.Inet
-  userAgent             String?
+  userAgent             String?       @map("user_agent")
   expiresAt             DateTime      @map("expires_at") @db.Timestamptz(6)
   revokedAt             DateTime?     @map("revoked_at") @db.Timestamptz(6)
   lastUsedAt            DateTime?     @map("last_used_at") @db.Timestamptz(6)
@@ -104,6 +155,7 @@ model UserSession {
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   user                  User          @relation(fields: [userId], references: [id])
   userIdentity          UserIdentity? @relation(fields: [userIdentityId], references: [id])
+  activeOrganization    Organization? @relation("ActiveOrganizationSession", fields: [activeOrganizationId], references: [id])
 
   @@map("user_sessions")
 }
@@ -161,4 +213,53 @@ model SimulationUiSession {
 
   @@unique([userId, sessionKey])
   @@map("simulation_ui_sessions")
+}
+
+model Scenario {
+  id                  String        @id @db.Uuid
+  organizationId      String?       @map("organization_id") @db.Uuid
+  crisisDomainId      String        @map("crisis_domain_id") @db.Uuid
+  crisisTypeId        String?       @map("crisis_type_id") @db.Uuid
+  crisisSubtypeId     String?       @map("crisis_subtype_id") @db.Uuid
+  code                String        @unique @db.VarChar(50)
+  title               String        @db.VarChar(200)
+  summary             String?
+  businessCategory    String?       @map("business_category") @db.VarChar(100)
+  status              String        @db.VarChar(20)
+  visibility          String        @db.VarChar(20)
+  mode                String        @db.VarChar(20)
+  defaultDifficulty   String        @map("default_difficulty") @db.VarChar(20)
+  minDurationMinutes  Int?          @map("min_duration_minutes")
+  maxDurationMinutes  Int?          @map("max_duration_minutes")
+  recommendedDurationMinutes Int?   @map("recommended_duration_minutes")
+  minParticipants     Int?          @map("min_participants")
+  maxParticipants     Int?          @map("max_participants")
+  currentVersionId    String?       @map("current_version_id") @db.Uuid
+  createdByUserId     String?       @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String?       @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt          DateTime?     @map("archived_at") @db.Timestamptz(6)
+  organization        Organization? @relation(fields: [organizationId], references: [id])
+  createdByUser       User?         @relation("ScenarioCreatedByUser", fields: [createdByUserId], references: [id])
+  updatedByUser       User?         @relation("ScenarioUpdatedByUser", fields: [updatedByUserId], references: [id])
+
+  @@map("scenarios")
+}
+
+model UserAuditLog {
+  id             BigInt        @id @default(autoincrement())
+  userId         String?       @map("user_id") @db.Uuid
+  actorUserId    String?       @map("actor_user_id") @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  eventType      String        @map("event_type") @db.VarChar(100)
+  eventData      Json?         @map("event_data")
+  ipAddress      String?       @map("ip_address") @db.Inet
+  userAgent      String?       @map("user_agent")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  user           User?         @relation("AuditLogUser", fields: [userId], references: [id])
+  actorUser      User?         @relation("AuditLogActor", fields: [actorUserId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@map("user_audit_logs")
 }
