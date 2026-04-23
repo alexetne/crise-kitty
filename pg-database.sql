@@ -1,8 +1,7 @@
 CREATE TYPE "user_status" AS ENUM (
   'active',
   'suspended',
-  'disabled',
-  'archived'
+  'invited'
 );
 
 CREATE TYPE "membership_status" AS ENUM (

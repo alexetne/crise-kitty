@@ -10,8 +10,7 @@ datasource db {
 enum UserStatus {
   active
   suspended
-  disabled
-  archived
+  invited
 
   @@map("user_status")
 }

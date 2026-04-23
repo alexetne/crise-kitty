@@ -11,13 +11,15 @@ export async function apiRequest<T>(
   path: string,
   { method = 'GET', token, body }: RequestOptions = {},
 ) {
+  const hasBody = body !== undefined;
+
   const response = await fetch(`${apiUrl}${path}`, {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(hasBody ? { body: JSON.stringify(body) } : {}),
   });
 
   const payload = (await response.json().catch(() => null)) as

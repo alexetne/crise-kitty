@@ -7,23 +7,28 @@ import type {
 } from 'fastify-type-provider-zod';
 import { createUuid, mapUserResponse, normalizePersonName } from '../lib/user-mapper.js';
 
-export const createUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8).max(128),
-  name: z.string().min(1).max(150).optional(),
-  firstName: z.string().min(1).max(100).optional(),
-  lastName: z.string().min(1).max(100).optional(),
-  displayName: z.string().min(1).max(150).optional(),
-}).superRefine((value, ctx) => {
-  const normalized = normalizePersonName(value);
-  if (!normalized) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['name'],
-      message: 'Provide either name or firstName and lastName.',
-    });
-  }
-});
+const userStatusSchema = z.enum(['active', 'suspended', 'invited']);
+
+export const createUserSchema = z
+  .object({
+    email: z.string().email(),
+    password: z.string().min(8).max(128),
+    name: z.string().min(1).max(150).optional(),
+    firstName: z.string().min(1).max(100).optional(),
+    lastName: z.string().min(1).max(100).optional(),
+    displayName: z.string().min(1).max(150).optional(),
+    status: userStatusSchema.optional().default('active'),
+  })
+  .superRefine((value, ctx) => {
+    const normalized = normalizePersonName(value);
+    if (!normalized) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['name'],
+        message: 'Provide either name or firstName and lastName.',
+      });
+    }
+  });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
@@ -33,16 +38,26 @@ const userResponseSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
   displayName: z.string().nullable(),
-  status: z.enum(['active', 'suspended', 'disabled', 'archived']),
+  status: userStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
 
 const listUsersQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: userStatusSchema.optional(),
+});
+
+const updateUserStatusSchema = z.object({
+  status: userStatusSchema,
+});
+
+const userParamsSchema = z.object({
+  id: z.uuid(),
 });
 
 type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
+type UpdateUserStatusBody = z.infer<typeof updateUserStatusSchema>;
 
 const usersRoute: FastifyPluginAsyncZod = async (app) => {
   const zodApp = app.withTypeProvider<ZodTypeProvider>();
@@ -63,6 +78,7 @@ const usersRoute: FastifyPluginAsyncZod = async (app) => {
       const users = await app.prisma.user.findMany({
         where: {
           deletedAt: null,
+          ...(request.query.status ? { status: request.query.status } : {}),
         },
         take: request.query.limit,
         orderBy: {
@@ -119,7 +135,9 @@ const usersRoute: FastifyPluginAsyncZod = async (app) => {
             firstName: normalizedName.firstName,
             lastName: normalizedName.lastName,
             displayName: normalizedName.displayName,
-            status: UserStatus.active,
+            status: request.body.status
+              ? UserStatus[request.body.status]
+              : UserStatus.active,
             lastSeenAt: new Date(),
           },
         });
@@ -139,6 +157,46 @@ const usersRoute: FastifyPluginAsyncZod = async (app) => {
       });
 
       return reply.code(201).send(mapUserResponse(user));
+    },
+  );
+
+  zodApp.patch<{ Params: z.infer<typeof userParamsSchema>; Body: UpdateUserStatusBody }>(
+    '/users/:id/status',
+    {
+      schema: {
+        tags: ['users'],
+        summary: 'Met à jour le statut d un utilisateur',
+        params: userParamsSchema,
+        body: updateUserStatusSchema,
+        response: {
+          200: userResponseSchema,
+          404: z.object({ message: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const existingUser = await app.prisma.user.findFirst({
+        where: {
+          id: request.params.id,
+          deletedAt: null,
+        },
+      });
+
+      if (!existingUser) {
+        return reply.code(404).send({
+          message: 'User not found',
+        });
+      }
+
+      const updatedUser = await app.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          status: UserStatus[request.body.status],
+          lastSeenAt: new Date(),
+        },
+      });
+
+      return mapUserResponse(updatedUser);
     },
   );
 };

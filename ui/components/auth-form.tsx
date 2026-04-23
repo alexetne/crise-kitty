@@ -16,7 +16,7 @@ type AuthSuccess = {
     firstName: string;
     lastName: string;
     displayName: string | null;
-    status: 'active' | 'suspended' | 'disabled' | 'archived';
+    status: 'active' | 'suspended' | 'invited';
     createdAt: string;
     updatedAt: string;
   };

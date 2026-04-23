@@ -73,13 +73,15 @@ const disableMfaBodySchema = z.object({
   methodId: z.uuid(),
 });
 
+const userStatusSchema = z.enum(['active', 'suspended', 'invited']);
+
 const authUserSchema = z.object({
   id: z.uuid(),
   email: z.email(),
   firstName: z.string(),
   lastName: z.string(),
   displayName: z.string().nullable(),
-  status: z.enum(['active', 'suspended', 'disabled', 'archived']),
+  status: userStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -246,6 +248,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           200: authSuccessSchema,
           202: loginMfaChallengeSchema,
           401: authMessageSchema,
+          403: authMessageSchema,
         },
       },
     },
@@ -256,7 +259,6 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           user: {
             email: request.body.email,
             deletedAt: null,
-            status: UserStatus.active,
           },
         },
         include: {
@@ -278,6 +280,18 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!passwordMatches) {
         return reply.code(401).send({
           message: 'Invalid credentials',
+        });
+      }
+
+      if (identity.user.status === UserStatus.suspended) {
+        return reply.code(403).send({
+          message: 'User account is suspended',
+        });
+      }
+
+      if (identity.user.status === UserStatus.invited) {
+        return reply.code(403).send({
+          message: 'User account is invited and must be activated',
         });
       }
 
@@ -386,6 +400,7 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
           200: authSuccessSchema,
           400: authMessageSchema,
           401: authMessageSchema,
+          403: authMessageSchema,
         },
       },
     },
@@ -418,6 +433,18 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
 
         return reply.code(401).send({
           message: 'MFA challenge expired',
+        });
+      }
+
+      if (challenge.user.status === UserStatus.suspended) {
+        return reply.code(403).send({
+          message: 'User account is suspended',
+        });
+      }
+
+      if (challenge.user.status === UserStatus.invited) {
+        return reply.code(403).send({
+          message: 'User account is invited and must be activated',
         });
       }
 
