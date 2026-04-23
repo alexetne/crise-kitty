@@ -43,3 +43,20 @@ Il faut distinguer le rôle "Plateforme" (qui gère l'outil) du rôle "Simulatio
 ## Permissions Fines (RBAC) : 
 
 - Capacité de définir qui peut : éditer un scénario, voir les rapports de Retex, ou déclencher une alerte
+
+# Audit des actions utilisateur
+
+- Logs d'administration : "L'utilisateur X a changé le rôle de l'utilisateur Y le 12/05 à 14h".
+
+- Logs d'activité Simulation : Chaque clic, chaque message envoyé, chaque validation de procédure doit être enregistré avec :
+    - Horodatage précis (milliseconde).
+    - ID de l'utilisateur.
+    - Action effectuée.
+    - Adresse IP (pour la sécurité).
+
+- Export de l'audit : Possibilité pour le responsable sécurité (RSSI) d'exporter ces logs en format CSV ou JSON pour analyse externe.
+
+# Réinitialisation & Vérification
+
+- Self-service sécurisé : Procédure de mot de passe oublié classique mais avec expiration rapide du lien (ex: 15 minutes).
+- Vérification d'e-mail : Obligatoire à l'inscription pour éviter les erreurs de saisie et s'assurer que les notifications de crise arriveront à la bonne adresse.
