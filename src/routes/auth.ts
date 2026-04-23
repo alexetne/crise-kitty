@@ -31,6 +31,10 @@ import {
   resolveUserSessionTimeoutMinutes,
 } from '../lib/session-policy.js';
 import {
+  assertOrganizationAccess,
+  getAccessibleOrganizations,
+} from '../lib/organization-context.js';
+import {
   createSessionExpiry,
   getRequestDeviceId,
   getRequestIp,
@@ -114,6 +118,28 @@ const sessionPolicySchema = z.object({
   source: z.enum(['default', 'organization']),
   organizationId: z.uuid().nullable(),
   organizationName: z.string().nullable(),
+});
+
+const organizationSummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  slug: z.string(),
+  parentOrganizationId: z.uuid().nullable(),
+  logoUrl: z.string().nullable(),
+  brandName: z.string().nullable(),
+  brandPrimaryColor: z.string().nullable(),
+  brandSecondaryColor: z.string().nullable(),
+  brandAccentColor: z.string().nullable(),
+  sessionTimeoutMinutes: z.number().int(),
+});
+
+const organizationContextSchema = z.object({
+  activeOrganizationId: z.uuid().nullable(),
+  organizations: z.array(organizationSummarySchema),
+});
+
+const activeOrganizationBodySchema = z.object({
+  organizationId: z.uuid(),
 });
 
 const organizationPolicyParamsSchema = z.object({
@@ -261,6 +287,9 @@ async function createAuthenticatedSession(
     },
   });
 
+  const memberships = await getAccessibleOrganizations(app, user.id);
+  const defaultActiveOrganizationId = memberships[0]?.organization_id ?? null;
+
   const sessionId = createUuid();
   const session = await app.prisma.userSession.create({
     data: {
@@ -275,6 +304,14 @@ async function createAuthenticatedSession(
       lastUsedAt: new Date(),
     },
   });
+
+  if (defaultActiveOrganizationId) {
+    await app.prisma.$executeRaw`
+      UPDATE user_sessions
+      SET active_organization_id = ${defaultActiveOrganizationId}::uuid
+      WHERE id = ${session.id}::uuid
+    `;
+  }
 
   return {
     conflict: false as const,
@@ -707,6 +744,102 @@ const authRoutes: FastifyPluginAsyncZod = async (app) => {
       }
 
       return mapUserResponse(user);
+    },
+  );
+
+  zodApp.get(
+    '/auth/organization-context',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ['auth'],
+        summary: 'Retourne les organisations accessibles et l organisation active de la session',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: organizationContextSchema,
+        },
+      },
+    },
+    async (request) => {
+      const [memberships, sessionRows] = await Promise.all([
+        getAccessibleOrganizations(app, request.user.userId),
+        app.prisma.$queryRaw<Array<{ active_organization_id: string | null }>>`
+          SELECT active_organization_id
+          FROM user_sessions
+          WHERE id = ${request.user.sessionId}::uuid
+          LIMIT 1
+        `,
+      ]);
+
+      return {
+        activeOrganizationId: sessionRows[0]?.active_organization_id ?? null,
+        organizations: memberships.map((membership) => ({
+          id: membership.organization_id,
+          name: membership.organization_name,
+          slug: membership.organization_slug,
+          parentOrganizationId: membership.parent_organization_id,
+          logoUrl: membership.logo_url,
+          brandName: membership.brand_name,
+          brandPrimaryColor: membership.brand_primary_color,
+          brandSecondaryColor: membership.brand_secondary_color,
+          brandAccentColor: membership.brand_accent_color,
+          sessionTimeoutMinutes: membership.session_timeout_minutes,
+        })),
+      };
+    },
+  );
+
+  zodApp.post<{ Body: z.infer<typeof activeOrganizationBodySchema> }>(
+    '/auth/active-organization',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ['auth'],
+        summary: 'Bascule l organisation active de la session courante',
+        security: [{ bearerAuth: [] }],
+        body: activeOrganizationBodySchema,
+        response: {
+          200: organizationContextSchema,
+          403: authMessageSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const membership = await assertOrganizationAccess(
+        app,
+        request.user.userId,
+        request.body.organizationId,
+      );
+
+      if (!membership) {
+        return reply.code(403).send({
+          message: 'Organization access denied',
+        });
+      }
+
+      await app.prisma.$executeRaw`
+        UPDATE user_sessions
+        SET active_organization_id = ${request.body.organizationId}::uuid
+        WHERE id = ${request.user.sessionId}::uuid
+      `;
+
+      const memberships = await getAccessibleOrganizations(app, request.user.userId);
+
+      return {
+        activeOrganizationId: request.body.organizationId,
+        organizations: memberships.map((membershipItem) => ({
+          id: membershipItem.organization_id,
+          name: membershipItem.organization_name,
+          slug: membershipItem.organization_slug,
+          parentOrganizationId: membershipItem.parent_organization_id,
+          logoUrl: membershipItem.logo_url,
+          brandName: membershipItem.brand_name,
+          brandPrimaryColor: membershipItem.brand_primary_color,
+          brandSecondaryColor: membershipItem.brand_secondary_color,
+          brandAccentColor: membershipItem.brand_accent_color,
+          sessionTimeoutMinutes: membershipItem.session_timeout_minutes,
+        })),
+      };
     },
   );
 
