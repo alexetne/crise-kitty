@@ -25,6 +25,24 @@ CREATE TYPE "auth_provider" AS ENUM (
   'sso'
 );
 
+CREATE TYPE "mfa_method_type" AS ENUM (
+  'totp_app',
+  'sms'
+);
+
+CREATE TYPE "mfa_method_status" AS ENUM (
+  'pending',
+  'active',
+  'disabled'
+);
+
+CREATE TYPE "mfa_challenge_status" AS ENUM (
+  'pending',
+  'verified',
+  'expired',
+  'cancelled'
+);
+
 CREATE TYPE "token_type" AS ENUM (
   'password_reset',
   'email_verification',
@@ -367,6 +385,36 @@ CREATE TABLE "auth_tokens" (
   "token_type" token_type NOT NULL,
   "expires_at" timestamptz NOT NULL,
   "used_at" timestamptz,
+  "created_at" timestamptz NOT NULL DEFAULT (now())
+);
+
+CREATE TABLE "user_mfa_methods" (
+  "id" uuid PRIMARY KEY NOT NULL,
+  "user_id" uuid NOT NULL,
+  "method_type" mfa_method_type NOT NULL,
+  "status" mfa_method_status NOT NULL DEFAULT 'pending',
+  "label" varchar(100),
+  "phone" varchar(30),
+  "secret" text,
+  "code_hash" text,
+  "code_expires_at" timestamptz,
+  "last_used_at" timestamptz,
+  "is_primary" boolean NOT NULL DEFAULT false,
+  "verified_at" timestamptz,
+  "disabled_at" timestamptz,
+  "created_at" timestamptz NOT NULL DEFAULT (now()),
+  "updated_at" timestamptz NOT NULL DEFAULT (now())
+);
+
+CREATE TABLE "auth_mfa_challenges" (
+  "id" uuid PRIMARY KEY NOT NULL,
+  "user_id" uuid NOT NULL,
+  "mfa_method_id" uuid NOT NULL,
+  "challenge_code_hash" text,
+  "status" mfa_challenge_status NOT NULL DEFAULT 'pending',
+  "expires_at" timestamptz NOT NULL,
+  "verified_at" timestamptz,
+  "cancelled_at" timestamptz,
   "created_at" timestamptz NOT NULL DEFAULT (now())
 );
 
@@ -968,6 +1016,24 @@ CREATE INDEX ON "auth_tokens" ("token_type");
 
 CREATE INDEX ON "auth_tokens" ("expires_at");
 
+CREATE INDEX ON "user_mfa_methods" ("user_id");
+
+CREATE INDEX ON "user_mfa_methods" ("method_type");
+
+CREATE INDEX ON "user_mfa_methods" ("status");
+
+CREATE INDEX ON "user_mfa_methods" ("code_expires_at");
+
+CREATE UNIQUE INDEX ON "user_mfa_methods" ("user_id", "method_type", "label");
+
+CREATE INDEX ON "auth_mfa_challenges" ("user_id");
+
+CREATE INDEX ON "auth_mfa_challenges" ("mfa_method_id");
+
+CREATE INDEX ON "auth_mfa_challenges" ("status");
+
+CREATE INDEX ON "auth_mfa_challenges" ("expires_at");
+
 CREATE INDEX ON "user_audit_logs" ("user_id");
 
 CREATE INDEX ON "user_audit_logs" ("actor_user_id");
@@ -1289,6 +1355,12 @@ ALTER TABLE "user_sessions" ADD FOREIGN KEY ("user_identity_id") REFERENCES "use
 ALTER TABLE "auth_tokens" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "auth_tokens" ADD FOREIGN KEY ("user_identity_id") REFERENCES "user_identities" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE "user_mfa_methods" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE "auth_mfa_challenges" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE "auth_mfa_challenges" ADD FOREIGN KEY ("mfa_method_id") REFERENCES "user_mfa_methods" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 
 ALTER TABLE "user_audit_logs" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 

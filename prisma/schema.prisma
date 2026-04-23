@@ -7,11 +7,121 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserStatus {
+  active
+  suspended
+  disabled
+  archived
+
+  @@map("user_status")
+}
+
+enum AuthProvider {
+  local
+  google
+  microsoft
+  sso
+
+  @@map("auth_provider")
+}
+
+enum MfaMethodType {
+  totp_app
+  sms
+
+  @@map("mfa_method_type")
+}
+
+enum MfaMethodStatus {
+  pending
+  active
+  disabled
+
+  @@map("mfa_method_status")
+}
+
+enum MfaChallengeStatus {
+  pending
+  verified
+  expired
+  cancelled
+
+  @@map("mfa_challenge_status")
+}
+
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String         @id @db.Uuid
+  email           String         @unique @db.VarChar(255)
+  firstName       String         @map("first_name") @db.VarChar(100)
+  lastName        String         @map("last_name") @db.VarChar(100)
+  displayName     String?        @map("display_name") @db.VarChar(150)
+  phone           String?        @db.VarChar(30)
+  avatarUrl       String?        @map("avatar_url")
+  status          UserStatus     @default(active)
+  emailVerifiedAt DateTime?      @map("email_verified_at") @db.Timestamptz(6)
+  lastLoginAt     DateTime?      @map("last_login_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime?      @map("last_seen_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(6)
+  identities      UserIdentity[]
+  mfaMethods      UserMfaMethod[]
+  mfaChallenges   AuthMfaChallenge[]
+
+  @@map("users")
+}
+
+model UserIdentity {
+  id             String       @id @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  provider       AuthProvider
+  providerUserId String?      @map("provider_user_id") @db.VarChar(255)
+  passwordHash   String?      @map("password_hash")
+  isPrimary      Boolean      @default(false) @map("is_primary")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@map("user_identities")
+}
+
+model UserMfaMethod {
+  id            String          @id @db.Uuid
+  userId        String          @map("user_id") @db.Uuid
+  methodType    MfaMethodType   @map("method_type")
+  status        MfaMethodStatus @default(pending)
+  label         String?         @db.VarChar(100)
+  phone         String?         @db.VarChar(30)
+  secret        String?
+  codeHash      String?         @map("code_hash")
+  codeExpiresAt DateTime?       @map("code_expires_at") @db.Timestamptz(6)
+  lastUsedAt    DateTime?       @map("last_used_at") @db.Timestamptz(6)
+  isPrimary     Boolean         @default(false) @map("is_primary")
+  verifiedAt    DateTime?       @map("verified_at") @db.Timestamptz(6)
+  disabledAt    DateTime?       @map("disabled_at") @db.Timestamptz(6)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user          User            @relation(fields: [userId], references: [id])
+  challenges    AuthMfaChallenge[]
+
+  @@unique([userId, methodType, label])
+  @@map("user_mfa_methods")
+}
+
+model AuthMfaChallenge {
+  id                String             @id @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  mfaMethodId       String             @map("mfa_method_id") @db.Uuid
+  challengeCodeHash String?            @map("challenge_code_hash")
+  status            MfaChallengeStatus @default(pending)
+  expiresAt         DateTime           @map("expires_at") @db.Timestamptz(6)
+  verifiedAt        DateTime?          @map("verified_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  user              User               @relation(fields: [userId], references: [id])
+  mfaMethod         UserMfaMethod      @relation(fields: [mfaMethodId], references: [id])
+
+  @@map("auth_mfa_challenges")
 }

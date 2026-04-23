@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 declare module '@fastify/jwt' {
   interface FastifyJWT {
     user: {
-      userId: number;
+      userId: string;
       email: string;
     };
   }
