@@ -44,6 +44,11 @@ Il faut distinguer le rôle "Plateforme" (qui gère l'outil) du rôle "Simulatio
 
 - Capacité de définir qui peut : éditer un scénario, voir les rapports de Retex, ou déclencher une alerte
 
+
+
+
+//////////////////////////////////////////////////////////////////////
+
 # Audit des actions utilisateur
 
 - Logs d'administration : "L'utilisateur X a changé le rôle de l'utilisateur Y le 12/05 à 14h".

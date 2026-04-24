@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Topbar } from '@/components/topbar';
+import { apiRequest } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 
 interface Organization {
   id: string;
@@ -23,9 +25,9 @@ export default function OrganizationsPage() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const res = await fetch('/api/organizations');
-        if (!res.ok) throw new Error('Failed to fetch organizations');
-        const data = await res.json();
+        const token = getToken();
+        if (!token) throw new Error('Unauthorized');
+        const data = await apiRequest<Organization[]>('/admin/organizations', { token });
         setOrganizations(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -47,7 +49,11 @@ export default function OrganizationsPage() {
             <h1 className="text-4xl font-bold text-gray-900">Organisations</h1>
             <p className="text-gray-600 mt-2">Gérez les organisations et leurs hiérarchies</p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition">
+          <button
+            disabled
+            title="La création d'organisation passe par l'API /organizations (à implémenter côté UI)."
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition opacity-60 cursor-not-allowed"
+          >
             + Nouvelle Organisation
           </button>
         </div>

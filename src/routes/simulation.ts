@@ -69,7 +69,7 @@ const simulationRoutes: FastifyPluginAsyncZod = async (app) => {
   zodApp.get<{ Querystring: SessionQuery }>(
     '/simulation/session',
     {
-      onRequest: [app.authenticate],
+      onRequest: [app.authenticate, app.requireAnyPermission('view_sessions')],
       schema: {
         tags: ['simulation'],
         summary: 'Retourne la dernière session d interface de simulation sauvegardée',
@@ -112,7 +112,7 @@ const simulationRoutes: FastifyPluginAsyncZod = async (app) => {
   zodApp.put<{ Body: SessionBody }>(
     '/simulation/session',
     {
-      onRequest: [app.authenticate],
+      onRequest: [app.authenticate, app.requireAnyPermission('view_sessions')],
       schema: {
         tags: ['simulation'],
         summary: 'Sauvegarde l état courant de l interface de simulation',

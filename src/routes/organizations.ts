@@ -230,10 +230,74 @@ const organizationsRoute: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
+  zodApp.get<{ Params: z.infer<typeof organizationParamsSchema> }>(
+    '/organizations/:id',
+    {
+      onRequest: [
+        app.authenticate,
+        app.requireAnyPermission([
+          'view_organization',
+          'manage_org_profile',
+          'manage_organizations',
+        ]),
+      ],
+      schema: {
+        tags: ['organizations'],
+        summary: 'Retourne le profil d une organisation accessible',
+        security: [{ bearerAuth: [] }],
+        params: organizationParamsSchema,
+        response: {
+          200: organizationSchema,
+          403: z.object({ message: z.string() }),
+          404: z.object({ message: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const membership = await assertOrganizationAccess(
+        app,
+        request.user.userId,
+        request.params.id,
+      );
+
+      if (!membership) {
+        return reply.code(403).send({ message: 'Organization access denied' });
+      }
+
+      const [organization] = await app.prisma.$queryRaw<OrganizationRow[]>`
+        SELECT
+          id,
+          name,
+          slug,
+          description,
+          is_active,
+          parent_organization_id,
+          logo_url,
+          brand_name,
+          brand_primary_color,
+          brand_secondary_color,
+          brand_accent_color,
+          session_timeout_minutes,
+          created_at,
+          updated_at
+        FROM organizations
+        WHERE id = ${request.params.id}::uuid
+          AND deleted_at IS NULL
+        LIMIT 1
+      `;
+
+      if (!organization) {
+        return reply.code(404).send({ message: 'Organization not found' });
+      }
+
+      return mapOrganizationRow(organization);
+    },
+  );
+
   zodApp.post<{ Body: z.infer<typeof createOrganizationBodySchema> }>(
     '/organizations',
     {
-      onRequest: [app.authenticate],
+      onRequest: [app.authenticate, app.requireAnyPermission('manage_organizations')],
       schema: {
         tags: ['organizations'],
         summary: 'Crée une organisation ou sous-entité',
@@ -362,7 +426,10 @@ const organizationsRoute: FastifyPluginAsyncZod = async (app) => {
   }>(
     '/organizations/:id',
     {
-      onRequest: [app.authenticate],
+      onRequest: [
+        app.authenticate,
+        app.requireAnyPermission(['manage_org_profile', 'manage_organizations']),
+      ],
       schema: {
         tags: ['organizations'],
         summary: 'Met à jour la hiérarchie ou le marquage blanc d une organisation',
@@ -512,7 +579,7 @@ const organizationsRoute: FastifyPluginAsyncZod = async (app) => {
   zodApp.get<{ Params: z.infer<typeof organizationParamsSchema> }>(
     '/organizations/:id/scenarios',
     {
-      onRequest: [app.authenticate],
+      onRequest: [app.authenticate, app.requireAnyPermission('view_scenarios')],
       schema: {
         tags: ['organizations'],
         summary: 'Liste uniquement les scénarios de l organisation ciblée',
@@ -563,7 +630,7 @@ const organizationsRoute: FastifyPluginAsyncZod = async (app) => {
   }>(
     '/organizations/:id/scenarios',
     {
-      onRequest: [app.authenticate],
+      onRequest: [app.authenticate, app.requireAnyPermission('create_scenario')],
       schema: {
         tags: ['organizations'],
         summary: 'Crée un scénario isolé dans l organisation ciblée',
@@ -672,7 +739,10 @@ const organizationsRoute: FastifyPluginAsyncZod = async (app) => {
   zodApp.get<{ Params: z.infer<typeof organizationParamsSchema> }>(
     '/organizations/:id/audit-logs',
     {
-      onRequest: [app.authenticate],
+      onRequest: [
+        app.authenticate,
+        app.requireAnyPermission(['view_audit_logs', 'manage_org_profile']),
+      ],
       schema: {
         tags: ['organizations'],
         summary: 'Liste uniquement les logs d audit de l organisation ciblée',

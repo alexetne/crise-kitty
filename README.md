@@ -86,6 +86,10 @@ npm run dev
 
 Crise Kitty utilise un système **Role-Based Access Control (RBAC)** à deux niveaux :
 
+En complément, les rôles sont catégorisés par **domaine** :
+- **Plateforme** : gère l’outil (SaaS)
+- **Simulation** : agit dans la crise (scénarios/sessions)
+
 #### 1. Rôles Globaux (Plateforme)
 - **Super Admin** : Accès total à la plateforme (équipe interne)
 - **Account Manager** : Gère les factures, quotas et subscriptions des organisations
@@ -103,9 +107,9 @@ Chaque rôle dispose d'un ensemble de permissions basées sur :
 - **Action** : view, create, edit, delete, manage, publish, trigger
 
 Exemples :
-- `scenarios:edit` - Éditer un scénario
-- `retex_reports:view` - Voir les rapports RETEX
-- `injections:trigger` - Déclencher une alerte/injection
+- `edit_scenario` - Éditer un scénario
+- `view_retex_reports` - Voir les rapports RETEX
+- `trigger_injections` - Déclencher une alerte/injection
 
 ### Page d'Administration
 
@@ -178,6 +182,7 @@ NEXT_PUBLIC_API_URL="/api"
 - `GET /auth/profile`
 - `GET /auth/permissions`
 - `GET /auth/organization-context`
+- `POST /auth/active-organization`
 
 ### Admin (Super Admin & Account Manager)
 
@@ -187,8 +192,18 @@ NEXT_PUBLIC_API_URL="/api"
 - `POST /admin/roles`
 - `GET /admin/organizations`
 - `GET /admin/organizations/:id`
-- `PUT /admin/organizations/:id`
 - `GET /admin/users`
+
+### Organisation (client)
+
+- `GET /organizations`
+- `GET /organizations/:id`
+- `PATCH /organizations/:id`
+
+### UI (navigation)
+
+- `GET /hub` - Page "Accès" (boutons Plateforme / Organisation / Simulation)
+- `GET /organization` - Profil de l’organisation active
 
 ### Utilitaires
 

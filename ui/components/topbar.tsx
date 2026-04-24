@@ -25,6 +25,7 @@ type OrganizationContext = {
 
 export function Topbar() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [organizationContext, setOrganizationContext] =
     useState<OrganizationContext | null>(null);
 
@@ -35,32 +36,51 @@ export function Topbar() {
   useEffect(() => {
     const token = getToken();
     setIsLoggedIn(Boolean(token));
+    setPermissions([]);
 
     if (!token) {
       setOrganizationContext(null);
       return;
     }
 
-    void apiRequest<OrganizationContext>('/auth/organization-context', { token })
-      .then((payload) => {
-        setOrganizationContext(payload);
+    void Promise.all([
+      apiRequest<OrganizationContext>('/auth/organization-context', { token }),
+      apiRequest<{ permissions: string[] }>('/auth/permissions', { token }),
+    ])
+      .then(([contextPayload, permissionsPayload]) => {
+        setOrganizationContext(contextPayload);
+        setPermissions(permissionsPayload.permissions ?? []);
 
+        const active = contextPayload.organizations.find(
+          (organization) => organization.id === contextPayload.activeOrganizationId,
+        );
         const root = document.documentElement;
-        root.style.setProperty(
-          '--accent',
-          payload.organizations.find((organization) => organization.id === payload.activeOrganizationId)?.brandPrimaryColor ??
-            '#d95f2b',
-        );
-        root.style.setProperty(
-          '--accent-2',
-          payload.organizations.find((organization) => organization.id === payload.activeOrganizationId)?.brandSecondaryColor ??
-            '#1f6b5b',
-        );
+        root.style.setProperty('--accent', active?.brandPrimaryColor ?? '#d95f2b');
+        root.style.setProperty('--accent-2', active?.brandSecondaryColor ?? '#1f6b5b');
       })
       .catch(() => {
         setOrganizationContext(null);
+        setPermissions([]);
       });
   }, []);
+
+  const canAccessPlatform =
+    permissions.includes('view_platform') ||
+    permissions.includes('manage_organizations') ||
+    permissions.includes('manage_roles') ||
+    permissions.includes('manage_billing') ||
+    permissions.includes('view_audit_logs');
+
+  const canAccessSimulation =
+    permissions.includes('view_sessions') ||
+    permissions.includes('manage_session') ||
+    permissions.includes('create_session');
+
+  const canAccessOrganization =
+    permissions.includes('view_organization') ||
+    permissions.includes('manage_org_profile') ||
+    permissions.includes('manage_org_members') ||
+    permissions.includes('manage_org_roles');
 
   return (
     <header className="topbar">
@@ -77,15 +97,17 @@ export function Topbar() {
 
       <nav className="nav">
         <Link href="/">Accueil</Link>
-        <Link href="/register">Register</Link>
-        <Link href="/login">Login</Link>
+        {isLoggedIn ? null : <Link href="/register">Register</Link>}
+        {isLoggedIn ? null : <Link href="/login">Login</Link>}
         <Link href="/profile">Profile</Link>
-        <Link href="/simulation">Simulation</Link>
-        {isLoggedIn && (
+        {isLoggedIn ? <Link href="/hub">Accès</Link> : null}
+        {isLoggedIn && canAccessOrganization ? <Link href="/organization">Organisation</Link> : null}
+        {isLoggedIn && canAccessSimulation ? <Link href="/simulation">Simulation</Link> : null}
+        {isLoggedIn && canAccessPlatform ? (
           <Link href="/admin" className="admin-link">
             Admin
           </Link>
-        )}
+        ) : null}
         {isLoggedIn && organizationContext?.organizations.length ? (
           <select
             aria-label="Organisation active"
@@ -111,6 +133,14 @@ export function Topbar() {
                 const root = document.documentElement;
                 root.style.setProperty('--accent', active?.brandPrimaryColor ?? '#d95f2b');
                 root.style.setProperty('--accent-2', active?.brandSecondaryColor ?? '#1f6b5b');
+
+                void apiRequest<{ permissions: string[] }>('/auth/permissions', { token })
+                  .then((permissionsPayload) => {
+                    setPermissions(permissionsPayload.permissions ?? []);
+                  })
+                  .catch(() => {
+                    setPermissions([]);
+                  });
               });
             }}
           >

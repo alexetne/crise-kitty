@@ -55,6 +55,13 @@ enum RoleScope {
   @@map("role_scope")
 }
 
+enum RoleDomain {
+  platform
+  simulation
+
+  @@map("role_domain")
+}
+
 model User {
   id              String         @id @db.Uuid
   email           String         @unique @db.VarChar(255)
@@ -280,6 +287,7 @@ model Role {
   code        String         @unique @db.VarChar(50)
   name        String         @db.VarChar(100)
   scope       RoleScope
+  domain      RoleDomain     @default(simulation)
   description String?
   isSystem    Boolean        @default(false) @map("is_system")
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)

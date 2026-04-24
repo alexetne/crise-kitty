@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Topbar } from '@/components/topbar';
+import { apiRequest } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 
 interface AdminStats {
   totalOrganizations: number;
@@ -51,49 +53,22 @@ const adminLinks: AdminLink[] = [
     color: 'bg-red-50 hover:bg-red-100'
   },
   {
-    id: 'billing',
-    title: 'Facturation',
-    description: 'Gérer les quotas, les factures et les abonnements',
-    href: '/admin/billing',
-    icon: '💳',
-    requiredPermission: 'manage_billing',
-    color: 'bg-green-50 hover:bg-green-100'
+    id: 'rbac-doc',
+    title: 'Doc RBAC',
+    description: 'Documentation interne des rôles & permissions',
+    href: '/admin/rbac-doc',
+    icon: '📚',
+    requiredPermission: 'view_platform',
+    color: 'bg-slate-50 hover:bg-slate-100'
   },
   {
-    id: 'audit',
-    title: 'Logs d\'Audit',
-    description: 'Consulter l\'historique des actions et accès',
-    href: '/admin/audit-logs',
-    icon: '📋',
-    requiredPermission: 'view_audit_logs',
-    color: 'bg-yellow-50 hover:bg-yellow-100'
-  },
-  {
-    id: 'scenarios',
-    title: 'Scénarios',
-    description: 'Gérer les scénarios globaux et les modèles',
-    href: '/admin/scenarios',
-    icon: '🎭',
-    requiredPermission: 'view_scenarios',
-    color: 'bg-pink-50 hover:bg-pink-100'
-  },
-  {
-    id: 'sessions',
-    title: 'Sessions Actives',
-    description: 'Monitorer les sessions en cours',
-    href: '/admin/sessions',
-    icon: '⚡',
-    requiredPermission: 'view_sessions',
-    color: 'bg-cyan-50 hover:bg-cyan-100'
-  },
-  {
-    id: 'platform',
-    title: 'Paramètres Plateforme',
-    description: 'Configuration globale de la plateforme',
-    href: '/admin/platform',
-    icon: '⚙️',
-    requiredPermission: 'manage_organizations',
-    color: 'bg-gray-50 hover:bg-gray-100'
+    id: 'hub',
+    title: 'Accès (Modes)',
+    description: 'Boutons Plateforme vs Simulation selon permissions',
+    href: '/hub',
+    icon: '🧭',
+    requiredPermission: 'view_platform',
+    color: 'bg-amber-50 hover:bg-amber-100'
   }
 ];
 
@@ -106,19 +81,19 @@ export default function AdminPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch user permissions
-        const permRes = await fetch('/api/auth/permissions');
-        if (permRes.ok) {
-          const permData = await permRes.json();
-          setUserPermissions(permData.permissions || []);
+        const token = getToken();
+        if (!token) {
+          router.push('/login');
+          return;
         }
 
-        // Fetch admin stats
-        const statsRes = await fetch('/api/admin/stats');
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-        }
+        const [permData, statsData] = await Promise.all([
+          apiRequest<{ permissions: string[] }>('/auth/permissions', { token }),
+          apiRequest<AdminStats>('/admin/stats', { token }),
+        ]);
+
+        setUserPermissions(permData.permissions || []);
+        setStats(statsData);
       } catch (error) {
         console.error('Failed to fetch admin data:', error);
       } finally {

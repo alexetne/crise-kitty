@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Topbar } from '@/components/topbar';
 import { useParams } from 'next/navigation';
+import { apiRequest } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 
 interface OrganizationProfile {
   id: string;
@@ -33,9 +35,9 @@ export default function OrganizationProfilePage() {
   useEffect(() => {
     const fetchOrganization = async () => {
       try {
-        const res = await fetch(`/api/admin/organizations/${orgId}`);
-        if (!res.ok) throw new Error('Failed to fetch organization');
-        const data = await res.json();
+        const token = getToken();
+        if (!token) throw new Error('Unauthorized');
+        const data = await apiRequest<OrganizationProfile>(`/admin/organizations/${orgId}`, { token });
         setOrg(data);
         setFormData(data);
       } catch (err) {
@@ -50,14 +52,24 @@ export default function OrganizationProfilePage() {
 
   const handleSave = async () => {
     try {
-      const res = await fetch(`/api/admin/organizations/${orgId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const token = getToken();
+      if (!token) throw new Error('Unauthorized');
 
-      if (!res.ok) throw new Error('Failed to update organization');
-      const data = await res.json();
+      const data = await apiRequest<OrganizationProfile>(`/organizations/${orgId}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          name: formData.name,
+          slug: formData.slug,
+          description: formData.description,
+          logoUrl: formData.logoUrl,
+          brandName: formData.brandName,
+          brandPrimaryColor: formData.brandPrimaryColor,
+          brandSecondaryColor: formData.brandSecondaryColor,
+          brandAccentColor: formData.brandAccentColor,
+          sessionTimeoutMinutes: formData.sessionTimeoutMinutes,
+        },
+      });
       setOrg(data);
       setIsEditing(false);
     } catch (err) {

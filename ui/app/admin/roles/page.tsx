@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Topbar } from '@/components/topbar';
+import { apiRequest } from '@/lib/api';
+import { getToken } from '@/lib/auth';
 
 interface Role {
   id: string;
@@ -33,9 +35,9 @@ export default function RolesPage() {
   useEffect(() => {
     const fetchRoles = async () => {
       try {
-        const res = await fetch('/api/roles');
-        if (!res.ok) throw new Error('Failed to fetch roles');
-        const data = await res.json();
+        const token = getToken();
+        if (!token) throw new Error('Unauthorized');
+        const data = await apiRequest<Role[]>('/admin/roles', { token });
         setRoles(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -49,9 +51,9 @@ export default function RolesPage() {
 
   const handleSelectRole = async (role: Role) => {
     try {
-      const res = await fetch(`/api/roles/${role.id}`);
-      if (!res.ok) throw new Error('Failed to fetch role details');
-      const data = await res.json();
+      const token = getToken();
+      if (!token) throw new Error('Unauthorized');
+      const data = await apiRequest<RoleDetails>(`/admin/roles/${role.id}`, { token });
       setSelectedRole(data);
     } catch (err) {
       console.error('Failed to fetch role details:', err);
